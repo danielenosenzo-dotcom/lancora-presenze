@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>L'Ancora — Presenze</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+  import { getDatabase, ref, push, set, onValue, query, orderByChild, limitToLast } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
+  
+  const firebaseConfig = {
+    apiKey: "AIzaSyCiq4s0XNvXWe90VU1cYIZ8KyXLJpD3OXM",
+    authDomain: "lancora-haccp.firebaseapp.com",
+    databaseURL: "https://lancora-haccp-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "lancora-haccp",
+    storageBucket: "lancora-haccp.firebasestorage.app",
+    messagingSenderId: "263121790360",
+    appId: "1:263121790360:web:18fbd1a9c0dff6809eb7ed"
+  };
+  
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  
+  window._fb = { db, ref, push, set, onValue, query, orderByChild, limitToLast, ready: true };
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+:root{
+  --navy:#0b1622;
+  --navy2:#111e2e;
+  --card:#152030;
+  --border:#1e3048;
+  --gold:#c9a84c;
+  --gold-l:#e8c97a;
+  --teal:#0e7c7b;
+  --teal-l:#4ecca3;
+  --danger:#e05c5c;
+  --success:#4caf82;
+  --muted:#5a7a9a;
+  --text:#e8eef4;
+}
+
+body{
+  background:var(--navy);
+  color:var(--text);
+  font-family:'DM Sans',sans-serif;
+  min-height:100vh;
+  max-width:480px;
+  margin:0 auto;
+}
+
+/* ── LOGIN ── */
+#loginScreen{
+  position:fixed;inset:0;
+  background:linear-gradient(160deg, #0b1622 0%, #0e1f35 50%, #071018 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:30px;z-index:100;
+}
+.login-logo{font-family:'Playfair Display',serif;font-size:2.2rem;color:var(--gold);margin-bottom:4px}
+.login-sub{font-size:0.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:48px}
+.pin-dots{display:flex;gap:14px;margin-bottom:32px}
+.pin-dot{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid var(--border);background:transparent;
+  transition:all 0.2s;
+}
+.pin-dot.filled{background:var(--gold);border-color:var(--gold);transform:scale(1.1)}
+.pin-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:10px;width:240px;
+}
+.pin-key{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:18px;
+  font-size:1.4rem;font-weight:500;color:var(--text);
+  cursor:pointer;text-align:center;
+  font-family:'DM Mono',monospace;
+  transition:all 0.15s;user-select:none;
+}
+.pin-key:active{background:var(--teal);transform:scale(0.93)}
+.pin-key.empty{background:transparent;border:none;cursor:default}
+.pin-key.del{font-size:1rem}
+.login-error{color:var(--danger);font-size:0.8rem;margin-top:16px;min-height:20px;text-align:center}
+.login-ok{color:var(--teal-l);font-size:0.85rem;margin-top:16px;text-align:center}
+
+/* ── APP ── */
+#appScreen{display:none}
+
+.hdr{
+  background:linear-gradient(135deg,var(--navy2),var(--card));
+  border-bottom:1px solid var(--border);
+  padding:16px 20px 12px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.hdr-brand{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--gold)}
+.hdr-user{
+  font-size:0.72rem;color:var(--muted);text-align:right;cursor:pointer;
+}
+.hdr-user span{color:var(--teal-l);display:block;font-size:0.8rem;font-weight:600}
+
+/* ── TABS ── */
+.tabs{
+  display:flex;background:var(--navy2);
+  border-bottom:1px solid var(--border);
+}
+.tab{
+  flex:1;padding:12px 4px;text-align:center;
+  font-size:0.65rem;font-weight:600;letter-spacing:0.5px;
+  text-transform:uppercase;color:var(--muted);
+  cursor:pointer;border:none;background:none;
+  border-bottom:2px solid transparent;transition:all 0.2s;
+}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tab .ic{display:block;font-size:1.2rem;margin-bottom:3px}
+
+/* ── SEZIONI ── */
+.sec{display:none;padding:16px;padding-bottom:20px}
+.sec.on{display:block}
+
+/* ── CARD ── */
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px;margin-bottom:14px;
+}
+.card-t{
+  font-family:'Playfair Display',serif;font-size:1rem;
+  color:var(--gold-l);margin-bottom:14px;
+}
+
+/* ── TIMBRA ── */
+.timbra-wrap{text-align:center;padding:8px 0 20px}
+.timbra-time{
+  font-family:'DM Mono',monospace;font-size:3rem;
+  color:var(--text);letter-spacing:2px;margin-bottom:4px;
+}
+.timbra-date{font-size:0.78rem;color:var(--muted);margin-bottom:24px}
+.timbra-status{
+  font-size:0.85rem;margin-bottom:20px;min-height:24px;
+  color:var(--teal-l);
+}
+.btn-timbra{
+  width:160px;height:160px;border-radius:50%;
+  border:3px solid var(--teal);
+  background:radial-gradient(circle,rgba(14,124,123,0.2),transparent);
+  color:var(--text);font-size:0.85rem;font-weight:600;
+  cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;
+  margin:0 auto;transition:all 0.2s;
+  font-family:'DM Sans',sans-serif;
+}
+.btn-timbra .ic{font-size:2.5rem}
+.btn-timbra:active{transform:scale(0.95);background:radial-gradient(circle,rgba(14,124,123,0.5),transparent)}
+.btn-timbra.uscita{border-color:var(--danger);background:radial-gradient(circle,rgba(224,92,92,0.2),transparent)}
+.btn-timbra.uscita:active{background:radial-gradient(circle,rgba(224,92,92,0.5),transparent)}
+
+/* ── LIST ── */
+.li{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);
+}
+.li:last-child{border-bottom:none}
+.li-name{font-size:0.88rem;font-weight:500}
+.li-meta{font-size:0.72rem;color:var(--muted);margin-top:2px}
+.badge{
+  font-size:0.65rem;font-weight:700;letter-spacing:0.5px;
+  padding:3px 8px;border-radius:20px;
+}
+.badge-green{background:rgba(76,207,130,0.15);color:var(--success)}
+.badge-red{background:rgba(224,92,92,0.15);color:var(--danger)}
+.badge-gold{background:rgba(201,168,76,0.15);color:var(--gold)}
+
+/* ── STAT ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat-card{
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);
+  border-radius:10px;padding:12px;text-align:center;
+}
+.stat-num{font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--gold)}
+.stat-lbl{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+
+/* ── FORM ── */
+label{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;margin-top:14px}
+label:first-child{margin-top:0}
+input,select{
+  width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);
+  border-radius:10px;padding:11px 14px;color:var(--text);font-size:0.88rem;
+  font-family:'DM Sans',sans-serif;
+}
+input:focus,select:focus{outline:none;border-color:var(--teal)}
+select option{background:var(--navy2)}
+
+.btn{
+  width:100%;padding:13px;border:none;border-radius:12px;
+  font-size:0.88rem;font-weight:600;cursor:pointer;
+  font-family:'DM Sans',sans-serif;margin-top:10px;
+  transition:all 0.15s;
+}
+.btn-g{background:var(--teal);color:#fff}
+.btn-g:active{background:#0a6060}
+.btn-o{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid var(--gold)}
+.btn-d{background:rgba(224,92,92,0.15);color:var(--danger);border:1px solid var(--danger)}
+
+.empty{padding:30px;text-align:center;color:var(--muted);font-size:0.82rem}
+
+/* ── SERVIZIO BADGE ── */
+.servizio-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--success);
+  display:inline-block;margin-right:6px;
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-logo">⚓ L'Ancora</div>
+  <div class="login-sub">Gestione Presenze</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-grid">
+    <button class="pin-key" onclick="pk(1)">1</button>
+    <button class="pin-key" onclick="pk(2)">2</button>
+    <button class="pin-key" onclick="pk(3)">3</button>
+    <button class="pin-key" onclick="pk(4)">4</button>
+    <button class="pin-key" onclick="pk(5)">5</button>
+    <button class="pin-key" onclick="pk(6)">6</button>
+    <button class="pin-key" onclick="pk(7)">7</button>
+    <button class="pin-key" onclick="pk(8)">8</button>
+    <button class="pin-key" onclick="pk(9)">9</button>
+    <button class="pin-key empty"></button>
+    <button class="pin-key" onclick="pk(0)">0</button>
+    <button class="pin-key del" onclick="pd()">⌫</button>
+  </div>
+  <div class="login-error" id="loginErr"></div>
+  <div class="login-ok" id="loginOk"></div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="hdr">
+    <div>
+      <div class="hdr-brand">⚓ L'Ancora</div>
+      <div style="font-size:0.65rem;color:var(--muted);letter-spacing:1px">PRESENZE</div>
+    </div>
+    <div class="hdr-user" onclick="doLogout()">
+      <span id="hdrName">—</span>
+      🔒 Esci
+    </div>
+  </div>
+
+  <div class="tabs" id="tabBar">
+    <button class="tab on" id="tab0" onclick="showTab(0)">
+      <span class="ic">⏱️</span>Timbra
+    </button>
+    <button class="tab" id="tab1" onclick="showTab(1)">
+      <span class="ic">📋</span>Storico
+    </button>
+    <button class="tab" id="tab2" id="tabAdmin" onclick="showTab(2)" style="display:none">
+      <span class="ic">👥</span>Team
+    </button>
+    <button class="tab" id="tab3" onclick="showTab(3)" style="display:none">
+      <span class="ic">⚙️</span>Gestione
+    </button>
+  </div>
+
+  <!-- TAB 0: TIMBRA -->
+  <section class="sec on" id="sec0">
+    <div class="card">
+      <div class="timbra-wrap">
+        <div class="timbra-time" id="orologio">--:--</div>
+        <div class="timbra-date" id="dataOggi">--</div>
+        <div class="timbra-status" id="timbraStatus">—</div>
+        <button class="btn-timbra" id="btnTimbra" onclick="timbra()">
+          <span class="ic">🟢</span>
+          <span id="btnTimbraLabel">Timbra Entrata</span>
+        </button>
+      </div>
+    </div>
+    <div class="card" id="cardOggi">
+      <div class="card-t">Oggi</div>
+      <div id="oggiList"><div class="empty">Nessuna timbrata oggi</div></div>
+    </div>
+  </section>
+
+  <!-- TAB 1: STORICO -->
+  <section class="sec" id="sec1">
+    <div class="card">
+      <div class="card-t">📋 Le tue timbrature</div>
+      <div id="storicoList"><div class="empty">Caricamento...</div></div>
+    </div>
+  </section>
+
+  <!-- TAB 2: TEAM (admin) -->
+  <section class="sec" id="sec2">
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-num" id="statPresenti">-</div>
+        <div class="stat-lbl">In servizio</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statOggi">-</div>
+        <div class="stat-lbl">Timbrature oggi</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-t">👥 Team — Adesso</div>
+      <div id="teamOggi"><div class="empty">Caricamento...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-t">📊 Settimana</div>
+      <div id="teamSett"><div class="empty">Caricamento...</div></div>
+    </div>
+  </section>
+
+  <!-- TAB 3: GESTIONE (admin) -->
+  <section class="sec" id="sec3">
+    <div class="card">
+      <div class="card-t">➕ Aggiungi Operatore</div>
+      <label>Nome</label>
+      <input type="text" id="newOpName" placeholder="es. Marco">
+      <label>Ruolo</label>
+      <select id="newOpRole">
+        <option>Chef</option>
+        <option>Sous Chef</option>
+        <option>Cuoco</option>
+        <option>Aiuto Cucina</option>
+        <option>Cameriere</option>
+        <option>Barista</option>
+      </select>
+      <label>PIN (4 cifre)</label>
+      <input type="password" id="newOpPin" maxlength="4" inputmode="numeric" placeholder="es. 1234">
+      <button class="btn btn-g" onclick="addOp()">➕ Aggiungi</button>
+    </div>
+    <div class="card">
+      <div class="card-t">👤 Operatori</div>
+      <div id="opsList"><div class="empty">Nessun operatore</div></div>
+    </div>
+    <div class="card" style="border-color:var(--danger)">
+      <div class="card-t" style="color:var(--danger)">⚠️ Zona Admin</div>
+      <button class="btn btn-d" onclick="clearAll()">🗑 Cancella tutte le timbrature</button>
+    </div>
+  </section>
+</div>
+
+<script>
+// ═══════════════════════════════
+// CONFIG
+// ═══════════════════════════════
+const PIN_ADMIN = '1503';
+const STORAGE_OPS = 'lancora_ops';
+const STORAGE_SESSION = 'lancora_session';
+
+let pinBuf = '';
+let currentUser = null; // {uid, name, role, isAdmin}
+
+// ═══════════════════════════════
+// UTILS
+// ═══════════════════════════════
+function ls(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
+function lss(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+function today(){ return new Date().toISOString().split('T')[0]; }
+function nowTime(){ return new Date().toTimeString().substring(0,5); }
+function uid(){ return Math.random().toString(36).substring(2,10); }
+
+function fmtDate(d){
+  if(!d) return '—';
+  const [y,m,g]=d.split('-');
+  return `${g}/${m}/${y}`;
+}
+
+// Orologio live
+setInterval(()=>{
+  const el=document.getElementById('orologio');
+  if(el) el.textContent=nowTime();
+},1000);
+
+document.getElementById('orologio').textContent=nowTime();
+document.getElementById('dataOggi').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
+
+// ═══════════════════════════════
+// PIN LOGIN
+// ═══════════════════════════════
+function pk(n){
+  if(pinBuf.length>=4) return;
+  pinBuf+=n.toString();
+  updateDots();
+  if(pinBuf.length===4) setTimeout(checkPin,200);
+}
+
+function pd(){
+  pinBuf=pinBuf.slice(0,-1);
+  updateDots();
+}
+
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const d=document.getElementById('d'+i);
+    if(d) d.className='pin-dot'+(i<pinBuf.length?' filled':'');
+  }
+}
+
+function checkPin(){
+  const err=document.getElementById('loginErr');
+  const ok=document.getElementById('loginOk');
+  
+  if(pinBuf===PIN_ADMIN){
+    ok.textContent='✅ Benvenuto Admin!';
+    err.textContent='';
+    setTimeout(()=>loginSuccess({uid:'admin',name:'Daniele',role:'Admin',isAdmin:true}),400);
+    return;
+  }
+  
+  const ops=ls(STORAGE_OPS);
+  const op=ops.find(o=>o.pin===pinBuf);
+  if(op){
+    ok.textContent=`✅ Benvenuto ${op.name}!`;
+    err.textContent='';
+    setTimeout(()=>loginSuccess({uid:op.id,name:op.name,role:op.role,isAdmin:false}),400);
+    return;
+  }
+  
+  err.textContent='PIN non valido. Riprova.';
+  ok.textContent='';
+  pinBuf='';
+  updateDots();
+}
+
+function loginSuccess(user){
+  currentUser=user;
+  lss(STORAGE_SESSION, user);
+  
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('hdrName').textContent=user.name;
+  
+  // Mostra tab admin se necessario
+  if(user.isAdmin){
+    document.getElementById('tab2').style.display='flex';
+    document.getElementById('tab3').style.display='flex';
+  }
+  
+  initApp(user);
+}
+
+function doLogout(){
+  if(!confirm('Vuoi uscire?')) return;
+  lss(STORAGE_SESSION, null);
+  currentUser=null;
+  pinBuf='';
+  updateDots();
+  document.getElementById('loginErr').textContent='';
+  document.getElementById('loginOk').textContent='';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('appScreen').style.display='none';
+}
+
+// ═══════════════════════════════
+// TABS
+// ═══════════════════════════════
+function showTab(n){
+  document.querySelectorAll('.sec').forEach((s,i)=>s.className='sec'+(i===n?' on':''));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.className='tab'+(i===n?' on':''));
+  if(n===1) loadStorico();
+  if(n===2) loadTeam();
+  if(n===3) renderOps();
+}
+
+// ═══════════════════════════════
+// FIREBASE HELPERS
+// ═══════════════════════════════
+function fb(){ return window._fb||null; }
+
+async function fbWrite(path, data){
+  const f=fb();
+  if(!f || !f.ready){ 
+    console.warn('Firebase non pronto');
+    return false; 
+  }
+  try{
+    const r=f.ref(f.db, path);
+    const newRef=f.push(r);
+    await f.set(newRef, data);
+    return true;
+  }catch(e){ console.error('Firebase write error:', e); return false; }
+}
+
+function fbListen(path, cb, limit=50){
+  const f=fb();
+  if(!f || !f.ready){ 
+    // Riprova quando Firebase è pronto
+    window.addEventListener('fb-ready', ()=>fbListen(path, cb, limit), {once:true});
+    return; 
+  }
+  const r=f.ref(f.db, path);
+  const q=f.query(r, f.orderByChild('timestamp'), f.limitToLast(limit));
+  f.onValue(q, snap=>cb(snap.val()||{}));
+}
+
+// ═══════════════════════════════
+// TIMBRA
+// ═══════════════════════════════
+let ultimaTimbrata = null; // 'entrata' o 'uscita'
+
+async function waitFirebase(timeout=5000){
+  if(window._fb?.ready) return true;
+  return new Promise(resolve=>{
+    const t=setTimeout(()=>resolve(false), timeout);
+    window.addEventListener('fb-ready', ()=>{ clearTimeout(t); resolve(true); }, {once:true});
+  });
+}
+
+async function timbra(){
+  if(!currentUser) return;
+  const btn=document.getElementById('btnTimbra');
+  const status=document.getElementById('timbraStatus');
+  
+  btn.disabled=true;
+  status.textContent='Connessione Firebase...';
+  
+  const fbOk=await waitFirebase();
+  if(!fbOk){
+    status.textContent='⚠️ Firebase non disponibile. Verifica connessione internet.';
+    btn.disabled=false;
+    return;
+  }
+  
+  const tipo=ultimaTimbrata==='entrata'?'uscita':'entrata';
+  status.textContent='Salvataggio...';
+  
+  const ok=await fbWrite('timbrature', {
+    uid: currentUser.uid,
+    nome: currentUser.name,
+    ruolo: currentUser.role,
+    tipo,
+    data: today(),
+    ora: nowTime(),
+    timestamp: Date.now()
+  });
+  
+  if(ok){
+    ultimaTimbrata=tipo;
+    aggiornaBtnTimbra();
+    status.textContent=tipo==='entrata'?`✅ Entrata registrata alle ${nowTime()}`:`✅ Uscita registrata alle ${nowTime()}`;
+    loadOggi();
+  } else {
+    status.textContent='⚠️ Errore. Riprova.';
+  }
+  
+  btn.disabled=false;
+}
+
+function aggiornaBtnTimbra(){
+  const btn=document.getElementById('btnTimbra');
+  const lbl=document.getElementById('btnTimbraLabel');
+  if(ultimaTimbrata==='entrata'){
+    btn.className='btn-timbra uscita';
+    btn.querySelector('.ic').textContent='🔴';
+    lbl.textContent='Timbra Uscita';
+  } else {
+    btn.className='btn-timbra';
+    btn.querySelector('.ic').textContent='🟢';
+    lbl.textContent='Timbra Entrata';
+  }
+}
+
+function loadOggi(){
+  if(!currentUser) return;
+  fbListen('timbrature', data=>{
+    const todayStr=today();
+    const items=Object.values(data)
+      .filter(t=>t.uid===currentUser.uid && t.data===todayStr)
+      .sort((a,b)=>a.timestamp-b.timestamp);
+    
+    // Determina stato attuale
+    if(items.length>0){
+      ultimaTimbrata=items[items.length-1].tipo;
+      aggiornaBtnTimbra();
+    }
+    
+    const box=document.getElementById('oggiList');
+    if(!items.length){ box.innerHTML='<div class="empty">Nessuna timbrata oggi</div>'; return; }
+    box.innerHTML=items.map(t=>`
+      <div class="li">
+        <div>
+          <div class="li-name">${t.tipo==='entrata'?'🟢 Entrata':'🔴 Uscita'}</div>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.9rem;color:${t.tipo==='entrata'?'var(--teal-l)':'var(--danger)'}">${t.ora}</div>
+      </div>`).join('');
+    
+    // Calcola ore se c'è sia entrata che uscita
+    const entrata=items.find(t=>t.tipo==='entrata');
+    const uscita=items.findLast?items.findLast(t=>t.tipo==='uscita'):items.filter(t=>t.tipo==='uscita').pop();
+    if(entrata&&uscita){
+      const [eh,em]=entrata.ora.split(':').map(Number);
+      const [uh,um]=uscita.ora.split(':').map(Number);
+      const minTot=(uh*60+um)-(eh*60+em);
+      if(minTot>0){
+        const ore=Math.floor(minTot/60);
+        const min=minTot%60;
+        box.innerHTML+=`<div style="text-align:center;padding:10px;color:var(--gold);font-size:0.82rem;border-top:1px solid var(--border);margin-top:6px">⏱️ Totale oggi: ${ore}h ${min}m</div>`;
+      }
+    }
+  }, 20);
+}
+
+// ═══════════════════════════════
+// STORICO
+// ═══════════════════════════════
+function loadStorico(){
+  if(!currentUser) return;
+  fbListen('timbrature', data=>{
+    const items=Object.values(data)
+      .filter(t=>t.uid===currentUser.uid)
+      .sort((a,b)=>b.timestamp-a.timestamp);
+    
+    const box=document.getElementById('storicoList');
+    if(!items.length){ box.innerHTML='<div class="empty">Nessuna timbrata trovata</div>'; return; }
+    
+    // Raggruppa per data
+    const byDate={};
+    items.forEach(t=>{ if(!byDate[t.data]) byDate[t.data]=[]; byDate[t.data].push(t); });
+    
+    box.innerHTML=Object.entries(byDate).map(([data,timbrature])=>{
+      const rows=timbrature.sort((a,b)=>a.timestamp-b.timestamp).map(t=>`
+        <div class="li">
+          <div class="li-name">${t.tipo==='entrata'?'🟢':'🔴'} ${t.tipo}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:var(--muted)">${t.ora}</div>
+        </div>`).join('');
+      return `<div style="margin-bottom:12px">
+        <div style="font-size:0.72rem;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${fmtDate(data)}</div>
+        ${rows}
+      </div>`;
+    }).join('<hr style="border-color:var(--border);margin:12px 0">');
+  }, 100);
+}
+
+// ═══════════════════════════════
+// TEAM (ADMIN)
+// ═══════════════════════════════
+function loadTeam(){
+  if(!currentUser?.isAdmin) return;
+  fbListen('timbrature', data=>{
+    const todayStr=today();
+    const items=Object.values(data);
+    const oggiItems=items.filter(t=>t.data===todayStr);
+    
+    // Stats
+    const byUid={};
+    oggiItems.forEach(t=>{
+      if(!byUid[t.uid]) byUid[t.uid]={nome:t.nome,ruolo:t.ruolo,items:[]};
+      byUid[t.uid].items.push(t);
+    });
+    
+    const inServizio=Object.values(byUid).filter(u=>{
+      const last=u.items.sort((a,b)=>b.timestamp-a.timestamp)[0];
+      return last?.tipo==='entrata';
+    }).length;
+    
+    document.getElementById('statPresenti').textContent=inServizio;
+    document.getElementById('statOggi').textContent=oggiItems.length;
+    
+    // Team oggi
+    const boxOggi=document.getElementById('teamOggi');
+    if(!Object.keys(byUid).length){
+      boxOggi.innerHTML='<div class="empty">Nessuna presenza oggi</div>';
+    } else {
+      boxOggi.innerHTML=Object.values(byUid).map(u=>{
+        const sorted=u.items.sort((a,b)=>a.timestamp-b.timestamp);
+        const entrata=sorted.find(t=>t.tipo==='entrata');
+        const uscita=[...sorted].reverse().find(t=>t.tipo==='uscita');
+        const inServizio=!uscita||entrata?.timestamp>uscita?.timestamp;
+        return `<div class="li">
+          <div>
+            <div class="li-name">
+              ${inServizio?'<span class="servizio-dot"></span>':''}${u.nome}
+            </div>
+            <div class="li-meta">${u.ruolo} · ${entrata?'Entrata '+entrata.ora:'Non timbrato'}${uscita?' · Uscita '+uscita.ora:''}</div>
+          </div>
+          <span class="badge ${inServizio?'badge-green':'badge-red'}">${inServizio?'IN SERVIZIO':'USCITO'}</span>
+        </div>`;
+      }).join('');
+    }
+    
+    // Settimana
+    const boxSett=document.getElementById('teamSett');
+    const byNome={};
+    items.forEach(t=>{
+      if(!byNome[t.nome]) byNome[t.nome]={entrate:0,uscite:0};
+      byNome[t.nome][t.tipo==='entrata'?'entrate':'uscite']++;
+    });
+    boxSett.innerHTML=Object.entries(byNome).map(([nome,s])=>`
+      <div class="li">
+        <div class="li-name">${nome}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">${s.entrate}🟢 · ${s.uscite}🔴</div>
+      </div>`).join('') || '<div class="empty">Nessun dato</div>';
+  }, 200);
+}
+
+// ═══════════════════════════════
+// GESTIONE OPERATORI
+// ═══════════════════════════════
+function addOp(){
+  const name=document.getElementById('newOpName').value.trim();
+  const role=document.getElementById('newOpRole').value;
+  const pin=document.getElementById('newOpPin').value.trim();
+  if(!name){ alert('Inserisci il nome'); return; }
+  if(!pin||pin.length!==4||!/^\d+$/.test(pin)){ alert('PIN deve essere 4 cifre numeriche'); return; }
+  if(pin===PIN_ADMIN){ alert('Questo PIN è riservato all\'Admin'); return; }
+  const ops=ls(STORAGE_OPS);
+  if(ops.find(o=>o.pin===pin)){ alert('PIN già usato da un altro operatore'); return; }
+  ops.push({id:uid(),name,role,pin});
+  lss(STORAGE_OPS,ops);
+  document.getElementById('newOpName').value='';
+  document.getElementById('newOpPin').value='';
+  renderOps();
+  alert(`✅ ${name} aggiunto!`);
+}
+
+function delOp(id){
+  if(!confirm('Eliminare questo operatore?')) return;
+  lss(STORAGE_OPS, ls(STORAGE_OPS).filter(o=>o.id!==id));
+  renderOps();
+}
+
+function renderOps(){
+  const ops=ls(STORAGE_OPS);
+  const box=document.getElementById('opsList');
+  if(!ops.length){ box.innerHTML='<div class="empty">Nessun operatore aggiunto</div>'; return; }
+  box.innerHTML=ops.map(o=>`
+    <div class="li">
+      <div>
+        <div class="li-name">${o.name}</div>
+        <div class="li-meta">${o.role} · PIN: ${o.pin}</div>
+      </div>
+      <button onclick="delOp('${o.id}')" style="background:var(--danger);border:none;color:#fff;border-radius:8px;padding:5px 10px;font-size:0.75rem;cursor:pointer">🗑</button>
+    </div>`).join('');
+}
+
+function clearAll(){
+  if(!confirm('Cancellare TUTTE le timbrature da Firebase? Azione irreversibile!')) return;
+  alert('Per cancellare tutti i dati vai su console.firebase.google.com → Realtime Database → timbrature → elimina');
+}
+
+// ═══════════════════════════════
+// INIT
+// ═══════════════════════════════
+function initApp(user){
+  loadOggi();
+  document.getElementById('timbraStatus').textContent=`Ciao ${user.name}! Timbra la tua presenza.`;
+}
+
+// Controlla sessione salvata
+window.addEventListener('load', ()=>{
+  const saved=ls(STORAGE_SESSION);
+  if(saved&&saved.uid){
+    currentUser=saved;
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appScreen').style.display='block';
+    document.getElementById('hdrName').textContent=saved.name;
+    if(saved.isAdmin){
+      document.getElementById('tab2').style.display='flex';
+      document.getElementById('tab3').style.display='flex';
+    }
+    initApp(saved);
+  }
+});
+</script>
+</body>
+</html>
