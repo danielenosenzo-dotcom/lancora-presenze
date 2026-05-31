@@ -1,0 +1,1 @@
+# lancora-presenze
