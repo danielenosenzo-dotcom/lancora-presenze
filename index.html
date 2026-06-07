@@ -2,540 +2,539 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Presenze Ancora">
 <title>L'Ancora — Presenze</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-  import { getDatabase, ref, push, set, onValue, query, orderByChild, limitToLast } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
-  const firebaseConfig = {
-    apiKey: "AIzaSyCiq4s0XNvXWe90VU1cYIZ8KyXLJpD3OXM",
-    authDomain: "lancora-haccp.firebaseapp.com",
-    databaseURL: "https://lancora-haccp-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "lancora-haccp",
-    storageBucket: "lancora-haccp.firebasestorage.app",
-    messagingSenderId: "263121790360",
-    appId: "1:263121790360:web:18fbd1a9c0dff6809eb7ed"
-  };
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  window._fb = { db, ref, push, set, onValue, query, orderByChild, limitToLast, ready: true };
-  window.dispatchEvent(new Event('fb-ready'));
-</script>
-
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 :root{
-  --navy:#0b1622;--navy2:#111e2e;--card:#152030;--border:#1e3048;
-  --gold:#c9a84c;--gold-l:#e8c97a;--teal:#0e7c7b;--teal-l:#4ecca3;
-  --danger:#e05c5c;--success:#4caf82;--muted:#5a7a9a;--text:#e8eef4;
+  --navy:#0d1f2d;--ocean:#1a3a4a;--teal:#0e7c7b;--teal-l:#12a09f;
+  --gold:#c9a84c;--gold-l:#e8c97a;--danger:#e05c5c;--success:#4caf82;
+  --muted:#8aa0ad;--card:#112232;--border:rgba(14,124,123,0.25)
 }
-body{background:var(--navy);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;max-width:480px;margin:0 auto}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif;background:var(--navy);color:#fff;min-height:100vh;overflow-x:hidden}
 
-/* SCHERMATA NOME */
-#nomeScreen{
-  position:fixed;inset:0;background:linear-gradient(160deg,#0b1622,#0e1f35,#071018);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;z-index:100;
-}
-.logo{font-family:'Playfair Display',serif;font-size:2.2rem;color:var(--gold);margin-bottom:4px}
-.logo-sub{font-size:0.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:48px}
-.nome-title{font-size:0.85rem;color:var(--muted);margin-bottom:20px;text-align:center}
-.nome-list{width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
-.nome-btn{
-  background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:16px;font-size:1rem;color:var(--text);cursor:pointer;text-align:center;
-  font-family:'DM Sans',sans-serif;font-weight:500;transition:all 0.15s;
-}
-.nome-btn:active{background:var(--teal);border-color:var(--teal);transform:scale(0.97)}
-.admin-link{font-size:0.65rem;color:var(--border);cursor:pointer;margin-top:20px}
-.admin-link:active{color:var(--muted)}
+/* HEADER */
+.hdr{background:linear-gradient(135deg,var(--ocean),var(--navy));padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.hdr-logo{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--gold)}
+.hdr-sub{font-size:0.6rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+.hdr-ora{font-size:0.78rem;color:var(--teal-l);font-weight:500}
 
-/* PIN ADMIN */
-#adminScreen{
-  position:fixed;inset:0;background:rgba(11,22,34,0.97);
-  display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px;z-index:200;
-}
-.pin-dots{display:flex;gap:14px;margin-bottom:32px}
-.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all 0.2s}
-.pin-dot.filled{background:var(--gold);border-color:var(--gold)}
-.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:220px}
-.pin-key{
-  background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:16px;font-size:1.3rem;color:var(--text);cursor:pointer;text-align:center;
-  font-family:'DM Mono',monospace;transition:all 0.15s;
-}
-.pin-key:active{background:var(--teal);transform:scale(0.93)}
-.pin-key.empty{background:transparent;border:none}
-.pin-close{font-size:0.8rem;color:var(--muted);cursor:pointer;margin-top:20px}
-.pin-err{color:var(--danger);font-size:0.78rem;margin-top:12px;min-height:20px}
+/* SCHERMATE */
+.screen{display:none;padding:20px 16px;min-height:calc(100vh - 70px)}
+.screen.on{display:block}
 
-/* APP */
-#appScreen{display:none}
-.hdr{
-  background:linear-gradient(135deg,var(--navy2),var(--card));
-  border-bottom:1px solid var(--border);padding:16px 20px 12px;
-  display:flex;justify-content:space-between;align-items:center;
-}
-.hdr-brand{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--gold)}
-.hdr-user{font-size:0.8rem;color:var(--teal-l);font-weight:600;cursor:pointer}
-
-.tabs{display:flex;background:var(--navy2);border-bottom:1px solid var(--border)}
-.tab{
-  flex:1;padding:12px 4px;text-align:center;font-size:0.65rem;font-weight:600;
-  letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);
-  cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all 0.2s;
-}
-.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
-.tab .ic{display:block;font-size:1.2rem;margin-bottom:3px}
-
-.sec{display:none;padding:16px 16px 30px}
-.sec.on{display:block}
+/* CARD */
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
-.card-t{font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold-l);margin-bottom:14px}
+.card-t{font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold);margin-bottom:14px}
 
-/* TIMBRA */
-.timbra-wrap{text-align:center;padding:8px 0 20px}
-.timbra-time{font-family:'DM Mono',monospace;font-size:3rem;color:var(--text);letter-spacing:2px;margin-bottom:4px}
-.timbra-date{font-size:0.78rem;color:var(--muted);margin-bottom:24px}
-.timbra-status{font-size:0.85rem;margin-bottom:20px;min-height:24px;color:var(--teal-l)}
-.btn-timbra{
-  width:160px;height:160px;border-radius:50%;border:3px solid var(--teal);
-  background:radial-gradient(circle,rgba(14,124,123,0.2),transparent);
-  color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  margin:0 auto;transition:all 0.2s;font-family:'DM Sans',sans-serif;
-}
-.btn-timbra .ic{font-size:2.5rem}
-.btn-timbra:active{transform:scale(0.95)}
-.btn-timbra.uscita{border-color:var(--danger);background:radial-gradient(circle,rgba(224,92,92,0.2),transparent)}
+/* BOTTONI NOMI */
+.nomi-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.nome-btn{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:22px 10px;cursor:pointer;text-align:center;transition:all 0.2s;font-family:'DM Sans',sans-serif}
+.nome-btn:active{transform:scale(0.96)}
+.nome-btn.cucina{border-color:rgba(14,124,123,0.5)}
+.nome-btn.sala{border-color:rgba(201,168,76,0.5)}
+.nome-btn .nome-ico{font-size:2.2rem;margin-bottom:6px}
+.nome-btn .nome-txt{font-size:1rem;font-weight:600;color:#fff}
+.nome-btn .nome-rep{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+.nome-btn.selected.cucina{background:rgba(14,124,123,0.2);border-color:var(--teal-l)}
+.nome-btn.selected.sala{background:rgba(201,168,76,0.12);border-color:var(--gold)}
+.nome-full{grid-column:1/-1}
 
-/* LIST */
-.li{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
-.li:last-child{border-bottom:none}
-.li-name{font-size:0.88rem;font-weight:500}
-.li-meta{font-size:0.72rem;color:var(--muted);margin-top:2px}
-.badge{font-size:0.65rem;font-weight:700;letter-spacing:0.5px;padding:3px 8px;border-radius:20px}
-.badge-green{background:rgba(76,207,130,0.15);color:var(--success)}
-.badge-red{background:rgba(224,92,92,0.15);color:var(--danger)}
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.stat-card{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
-.stat-num{font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--gold)}
-.stat-lbl{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
-.servizio-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;margin-right:6px;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-label{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;margin-top:14px}
-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:0.88rem;font-family:'DM Sans',sans-serif}
-input:focus{outline:none;border-color:var(--teal)}
-.btn{width:100%;padding:13px;border:none;border-radius:12px;font-size:0.88rem;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:10px;transition:all 0.15s}
-.btn-g{background:var(--teal);color:#fff}
-.btn-d{background:rgba(224,92,92,0.15);color:var(--danger);border:1px solid var(--danger)}
-.empty{padding:30px;text-align:center;color:var(--muted);font-size:0.82rem}
+/* BOTTONI AZIONE */
+.azioni-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.az-btn{border:none;border-radius:14px;padding:20px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.95rem;font-weight:600;transition:all 0.2s;text-align:center}
+.az-btn:active{transform:scale(0.96)}
+.az-btn .az-ico{font-size:1.8rem;display:block;margin-bottom:6px}
+.az-entrata{background:var(--success);color:#fff}
+.az-uscita{background:var(--danger);color:#fff}
+.az-ferie{background:rgba(201,168,76,0.2);border:2px solid var(--gold);color:var(--gold-l)}
+.az-malattia{background:rgba(224,92,92,0.15);border:2px solid var(--danger);color:#ff9999}
+
+/* STATUS */
+.status-box{background:rgba(14,124,123,0.1);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+.status-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.status-row:last-child{border-bottom:none}
+.status-tipo{font-size:0.82rem;font-weight:600}
+.status-ora{font-size:0.78rem;color:var(--muted)}
+
+/* LISTA DIPENDENTI ADMIN */
+.dip-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,0.04);margin-bottom:8px;border:1px solid var(--border)}
+.dip-nome{font-weight:600;font-size:0.9rem}
+.dip-rep{font-size:0.65rem;color:var(--muted);margin-top:2px}
+.dip-stato{font-size:0.8rem;font-weight:600}
+.stato-entrata{color:var(--success)}
+.stato-uscita{color:var(--danger)}
+.stato-ferie{color:var(--gold)}
+.stato-malattia{color:#ff9999}
+.stato-assente{color:var(--muted)}
+
+/* REPORT TABELLA */
+.rep-table{width:100%;border-collapse:collapse;font-size:0.78rem}
+.rep-table th{text-align:left;padding:8px 6px;color:var(--muted);border-bottom:1px solid var(--border);font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px}
+.rep-table td{padding:9px 6px;border-bottom:1px solid rgba(14,124,123,0.1)}
+.rep-table tr:last-child td{border-bottom:none}
+
+/* BUTTONS */
+.btn{display:block;width:100%;padding:13px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;text-align:center;transition:opacity 0.2s,transform 0.1s;margin-top:10px}
+.btn:active{transform:scale(0.98)}
+.btn-g{background:var(--gold);color:var(--navy)}
+.btn-t{background:var(--teal);color:#fff}
+.btn-d{background:var(--danger);color:#fff}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-sm{display:inline-block;width:auto;padding:7px 14px;font-size:0.78rem;margin-top:0}
+
+/* NAV BOTTOM */
+.nav{position:fixed;bottom:0;left:0;right:0;background:var(--ocean);border-top:1px solid var(--border);display:flex;z-index:200;padding-bottom:env(safe-area-inset-bottom)}
+.nb{flex:1;padding:8px 2px 12px;background:none;border:none;color:var(--muted);font-size:0.6rem;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color 0.2s;font-family:'DM Sans',sans-serif}
+.nb .ic{font-size:1.3rem}
+.nb.on{color:var(--gold)}
+
+/* FORM */
+label{display:block;font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;margin-top:12px}
+input,select{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:9px;padding:11px 13px;color:#fff;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
+input:focus,select:focus{border-color:var(--teal-l)}
+select option{background:var(--ocean)}
+
+/* TOAST */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--teal);color:#fff;padding:12px 24px;border-radius:30px;font-size:0.88rem;font-weight:600;z-index:999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1}
+
+/* EMPTY */
+.empty{text-align:center;padding:30px 20px;color:var(--muted);font-size:0.85rem}
+.empty-ico{font-size:2.5rem;margin-bottom:10px}
+
+/* PIN */
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto}
+.pin-btn{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:1.2rem;font-weight:600;cursor:pointer;text-align:center;color:#fff;font-family:'DM Sans',sans-serif}
+.pin-btn:active{background:var(--teal);border-color:var(--teal)}
+.pin-display{text-align:center;font-size:2rem;letter-spacing:8px;color:var(--gold);margin-bottom:20px;min-height:40px}
+
+body{padding-bottom:70px}
 </style>
 </head>
 <body>
 
-<!-- SCHERMATA NOME -->
-<div id="nomeScreen">
-  <div class="logo">⚓ L'Ancora</div>
-  <div class="logo-sub">Presenze</div>
-  <div class="nome-title">Chi sei?</div>
-  <div class="nome-list" id="nomeList">
-    <div class="empty">Caricamento...</div>
+<!-- HEADER -->
+<header class="hdr">
+  <div>
+    <div class="hdr-logo">L'Ancora</div>
+    <div class="hdr-sub">Registro Presenze</div>
   </div>
-  <div class="admin-link" onclick="showAdminPin()">● ● ●</div>
-</div>
+  <div class="hdr-ora" id="oraCorrente"></div>
+</header>
 
-<!-- PIN ADMIN -->
-<div id="adminScreen">
-  <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px">Accesso Admin</div>
-  <div class="pin-dots">
-    <div class="pin-dot" id="d0"></div>
-    <div class="pin-dot" id="d1"></div>
-    <div class="pin-dot" id="d2"></div>
-    <div class="pin-dot" id="d3"></div>
-  </div>
-  <div class="pin-grid">
-    <button class="pin-key" onclick="pk(1)">1</button>
-    <button class="pin-key" onclick="pk(2)">2</button>
-    <button class="pin-key" onclick="pk(3)">3</button>
-    <button class="pin-key" onclick="pk(4)">4</button>
-    <button class="pin-key" onclick="pk(5)">5</button>
-    <button class="pin-key" onclick="pk(6)">6</button>
-    <button class="pin-key" onclick="pk(7)">7</button>
-    <button class="pin-key" onclick="pk(8)">8</button>
-    <button class="pin-key" onclick="pk(9)">9</button>
-    <button class="pin-key empty"></button>
-    <button class="pin-key" onclick="pk(0)">0</button>
-    <button class="pin-key" onclick="pd()">⌫</button>
-  </div>
-  <div class="pin-err" id="pinErr"></div>
-  <div class="pin-close" onclick="hideAdminPin()">Annulla</div>
-</div>
-
-<!-- APP -->
-<div id="appScreen">
-  <div class="hdr">
-    <div>
-      <div class="hdr-brand">⚓ L'Ancora</div>
-      <div style="font-size:0.65rem;color:var(--muted);letter-spacing:1px">PRESENZE</div>
-    </div>
-    <div class="hdr-user" onclick="doLogout()" id="hdrName">—</div>
+<!-- ══ SCHERMATA: TIMBRA ══ -->
+<div class="screen on" id="sc-timbra">
+  <div style="text-align:center;margin-bottom:20px">
+    <div style="font-size:1.1rem;font-weight:600;color:var(--gold)" id="data-oggi"></div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:4px">Seleziona il tuo nome e timbra</div>
   </div>
 
-  <div class="tabs">
-    <button class="tab on" id="tab0" onclick="showTab(0)"><span class="ic">⏱️</span>Timbra</button>
-    <button class="tab" id="tab1" onclick="showTab(1)"><span class="ic">📋</span>Storico</button>
-    <button class="tab" id="tab2" onclick="showTab(2)" style="display:none"><span class="ic">👥</span>Team</button>
-    <button class="tab" id="tab3" onclick="showTab(3)" style="display:none"><span class="ic">⚙️</span>Gestione</button>
+  <!-- Selezione nome -->
+  <div class="nomi-grid">
+    <button class="nome-btn cucina" onclick="selNome('Adam',this)">
+      <div class="nome-ico">👨‍🍳</div>
+      <div class="nome-txt">Adam</div>
+      <div class="nome-rep">Cucina</div>
+    </button>
+    <button class="nome-btn cucina" onclick="selNome('Alessio',this)">
+      <div class="nome-ico">👨‍🍳</div>
+      <div class="nome-txt">Alessio</div>
+      <div class="nome-rep">Cucina</div>
+    </button>
+    <button class="nome-btn cucina" onclick="selNome('Dalia',this)">
+      <div class="nome-ico">👩‍🍳</div>
+      <div class="nome-txt">Dalia</div>
+      <div class="nome-rep">Cucina</div>
+    </button>
+    <button class="nome-btn sala" onclick="selNome('Roberta',this)">
+      <div class="nome-ico">🍽️</div>
+      <div class="nome-txt">Roberta</div>
+      <div class="nome-rep">Sala</div>
+    </button>
+    <button class="nome-btn sala nome-full" onclick="selNome('Stefano',this)">
+      <div class="nome-ico">🍽️</div>
+      <div class="nome-txt">Stefano</div>
+      <div class="nome-rep">Sala</div>
+    </button>
   </div>
 
-  <!-- TIMBRA -->
-  <section class="sec on" id="sec0">
+  <!-- Stato oggi -->
+  <div id="stato-oggi-box" style="display:none">
     <div class="card">
-      <div class="timbra-wrap">
-        <div class="timbra-time" id="orologio">--:--</div>
-        <div class="timbra-date" id="dataOggi"></div>
-        <div class="timbra-status" id="timbraStatus">Pronto a timbrare</div>
-        <button class="btn-timbra" id="btnTimbra" onclick="timbra()">
-          <span class="ic">🟢</span>
-          <span id="btnLabel">Timbra Entrata</span>
+      <div class="card-t" id="stato-nome-label">Le tue timbrature oggi</div>
+      <div class="status-box" id="status-timbrature">
+        <div class="empty"><div class="empty-ico">🕐</div>Nessuna timbratura oggi</div>
+      </div>
+
+      <!-- Azioni -->
+      <div class="azioni-grid">
+        <button class="az-btn az-entrata" onclick="timbra('entrata')">
+          <span class="az-ico">🟢</span>Entrata
+        </button>
+        <button class="az-btn az-uscita" onclick="timbra('uscita')">
+          <span class="az-ico">🔴</span>Uscita
+        </button>
+        <button class="az-btn az-ferie" onclick="timbra('ferie')">
+          <span class="az-ico">🏖️</span>Ferie
+        </button>
+        <button class="az-btn az-malattia" onclick="timbra('malattia')">
+          <span class="az-ico">🤒</span>Malattia
         </button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-t">Oggi</div>
-      <div id="oggiList"><div class="empty">Nessuna timbrata</div></div>
-    </div>
-  </section>
-
-  <!-- STORICO -->
-  <section class="sec" id="sec1">
-    <div class="card">
-      <div class="card-t">📋 Le tue timbrature</div>
-      <div id="storicoList"><div class="empty">Caricamento...</div></div>
-    </div>
-  </section>
-
-  <!-- TEAM -->
-  <section class="sec" id="sec2">
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-num" id="statPresenti">-</div><div class="stat-lbl">In servizio</div></div>
-      <div class="stat-card"><div class="stat-num" id="statOggi">-</div><div class="stat-lbl">Timbrature oggi</div></div>
-    </div>
-    <div class="card">
-      <div class="card-t">👥 Team — Adesso</div>
-      <div id="teamOggi"><div class="empty">Caricamento...</div></div>
-    </div>
-    <div class="card">
-      <div class="card-t">📊 Settimana</div>
-      <div id="teamSett"><div class="empty">Caricamento...</div></div>
-    </div>
-  </section>
-
-  <!-- GESTIONE -->
-  <section class="sec" id="sec3">
-    <div class="card">
-      <div class="card-t">➕ Aggiungi Dipendente</div>
-      <label>Nome</label>
-      <input type="text" id="newOpName" placeholder="es. Roberta">
-      <button class="btn btn-g" onclick="addOp()">➕ Aggiungi</button>
-    </div>
-    <div class="card">
-      <div class="card-t">👤 Dipendenti</div>
-      <div id="opsList"><div class="empty">Nessun dipendente</div></div>
-    </div>
-  </section>
+  </div>
 </div>
 
+<!-- ══ SCHERMATA: OGGI (ADMIN) ══ -->
+<div class="screen" id="sc-oggi">
+  <div class="card">
+    <div class="card-t">📋 Presenze di Oggi</div>
+    <div id="oggi-data" style="font-size:0.8rem;color:var(--muted);margin-bottom:14px"></div>
+    <div id="oggi-lista">
+      <div class="empty"><div class="empty-ico">👥</div>Caricamento...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCHERMATA: REPORT ══ -->
+<div class="screen" id="sc-report">
+  <div id="sc-report-pin" style="display:block">
+    <div class="card" style="text-align:center">
+      <div class="card-t">🔐 Area Admin</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:20px">Inserisci PIN per accedere ai report</div>
+      <div class="pin-display" id="pin-display">——</div>
+      <div class="pin-grid">
+        <button class="pin-btn" onclick="pinTasto('1')">1</button>
+        <button class="pin-btn" onclick="pinTasto('2')">2</button>
+        <button class="pin-btn" onclick="pinTasto('3')">3</button>
+        <button class="pin-btn" onclick="pinTasto('4')">4</button>
+        <button class="pin-btn" onclick="pinTasto('5')">5</button>
+        <button class="pin-btn" onclick="pinTasto('6')">6</button>
+        <button class="pin-btn" onclick="pinTasto('7')">7</button>
+        <button class="pin-btn" onclick="pinTasto('8')">8</button>
+        <button class="pin-btn" onclick="pinTasto('9')">9</button>
+        <button class="pin-btn" onclick="pinCanc()" style="color:var(--danger)">✕</button>
+        <button class="pin-btn" onclick="pinTasto('0')">0</button>
+        <button class="pin-btn" onclick="pinOk()" style="background:var(--teal);border-color:var(--teal)">✓</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sc-report-body" style="display:none">
+    <div class="card">
+      <div class="card-t">📊 Report Mensile</div>
+      <label>Seleziona mese</label>
+      <select id="mese-sel" onchange="caricaReport()"></select>
+      <div id="report-contenuto" style="margin-top:16px"></div>
+      <button class="btn btn-g" onclick="scaricaPDF()" style="margin-top:14px">⬇️ Scarica PDF</button>
+      <button class="btn btn-o" onclick="document.getElementById('sc-report-pin').style.display='block';document.getElementById('sc-report-body').style.display='none'">🔒 Blocca</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NAV BOTTOM ══ -->
+<nav class="nav">
+  <button class="nb on" id="nb-timbra" onclick="showScreen('timbra')">
+    <span class="ic">⏱️</span>Timbra
+  </button>
+  <button class="nb" id="nb-oggi" onclick="showScreen('oggi')">
+    <span class="ic">👥</span>Oggi
+  </button>
+  <button class="nb" id="nb-report" onclick="showScreen('report')">
+    <span class="ic">📊</span>Report
+  </button>
+</nav>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
 <script>
+// ══ FIREBASE CONFIG ══
+const firebaseConfig = {
+  apiKey: "AIzaSyCiq4s0XNvXWe90VU1cYIZ8KyXLJpD3OXM",
+  authDomain: "lancora-haccp.firebaseapp.com",
+  databaseURL: "https://lancora-haccp-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "lancora-haccp",
+  storageBucket: "lancora-haccp.firebasestorage.app",
+  messagingSenderId: "263121790360",
+  appId: "1:263121790360:web:18fbd1a9c0dff6809eb7ed"
+};
+
+// Usa la stessa config del firebase-config.js se disponibile
+let db;
+try {
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+} catch(e) {
+  console.error('Firebase init error:', e);
+}
+
+// ══ COSTANTI ══
+const DIPENDENTI = [
+  {nome:'Adam',   reparto:'Cucina', ico:'👨‍🍳'},
+  {nome:'Alessio',reparto:'Cucina', ico:'👨‍🍳'},
+  {nome:'Dalia',  reparto:'Cucina', ico:'👩‍🍳'},
+  {nome:'Roberta',reparto:'Sala',   ico:'🍽️'},
+  {nome:'Stefano',reparto:'Sala',   ico:'🍽️'},
+];
 const PIN_ADMIN = '1503';
-let currentUser = null;
-let ultimaTimbrata = null;
-let pinBuf = '';
 
-// Utils
-function today(){ return new Date().toISOString().split('T')[0]; }
-function nowTime(){ return new Date().toTimeString().substring(0,5); }
-function uid(){ return Math.random().toString(36).substring(2,10); }
-function fmtDate(d){ if(!d) return '—'; const [y,m,g]=d.split('-'); return `${g}/${m}/${y}`; }
-function fb(){ return window._fb||null; }
+// ══ STATO ══
+let nomeSelezionato = null;
+let pinCorrente = '';
 
-// Orologio
-setInterval(()=>{ const el=document.getElementById('orologio'); if(el) el.textContent=nowTime(); },1000);
-document.getElementById('orologio').textContent=nowTime();
-document.getElementById('dataOggi').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
-
-// Firebase helpers
-async function waitFb(t=5000){
-  if(window._fb?.ready) return true;
-  return new Promise(r=>{ const to=setTimeout(()=>r(false),t); window.addEventListener('fb-ready',()=>{ clearTimeout(to);r(true); },{once:true}); });
+// ══ UTILS ══
+function oggi() {
+  return new Date().toISOString().slice(0,10);
+}
+function oraAdesso() {
+  return new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtData(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 
-async function fbWrite(path, data){
-  const f=fb(); if(!f) return false;
-  try{ const r=f.ref(f.db,path); const nr=f.push(r); await f.set(nr,data); return true; }
-  catch(e){ console.error(e); return false; }
+// ══ OROLOGIO ══
+function aggiornaOra() {
+  document.getElementById('oraCorrente').textContent = oraAdesso();
+}
+setInterval(aggiornaOra, 1000);
+aggiornaOra();
+
+// ══ NAVIGAZIONE ══
+function showScreen(nome) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
+  document.getElementById('sc-' + nome).classList.add('on');
+  document.getElementById('nb-' + nome).classList.add('on');
+  if (nome === 'oggi') caricaOggi();
 }
 
-async function fbSet(path, data){
-  const f=fb(); if(!f) return false;
-  try{ const r=f.ref(f.db,path); await f.set(r,data); return true; }
-  catch(e){ console.error(e); return false; }
+// ══ SELEZIONE NOME ══
+function selNome(nome, btn) {
+  nomeSelezionato = nome;
+  document.querySelectorAll('.nome-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('stato-nome-label').textContent = nome + ' — oggi';
+  document.getElementById('stato-oggi-box').style.display = 'block';
+  caricaStatoOggi(nome);
 }
 
-function fbListen(path, cb, limit=100){
-  const f=fb();
-  if(!f){ window.addEventListener('fb-ready',()=>fbListen(path,cb,limit),{once:true}); return; }
-  const r=f.ref(f.db,path);
-  const q=f.query(r,f.orderByChild('timestamp'),f.limitToLast(limit));
-  f.onValue(q,snap=>cb(snap.val()||{}));
+// ══ TIMBRA ══
+async function timbra(tipo) {
+  if (!nomeSelezionato) { mostraToast('Seleziona prima il tuo nome!'); return; }
+  const ora = oraAdesso();
+  const docId = nomeSelezionato + '_' + oggi();
+  try {
+    const ref = db.collection('presenze').doc(docId);
+    const doc = await ref.get();
+    const dati = doc.exists ? doc.data() : {nome: nomeSelezionato, data: oggi(), timbrature: []};
+    dati.timbrature = dati.timbrature || [];
+    dati.timbrature.push({tipo, ora, ts: Date.now()});
+    await ref.set(dati);
+    const msg = {
+      entrata:  '✅ Entrata registrata alle ' + ora,
+      uscita:   '✅ Uscita registrata alle ' + ora,
+      ferie:    '🏖️ Ferie registrate per oggi',
+      malattia: '🤒 Malattia registrata per oggi'
+    }[tipo];
+    mostraToast(msg);
+    caricaStatoOggi(nomeSelezionato);
+  } catch(e) {
+    mostraToast('❌ Errore: ' + e.message);
+  }
 }
 
-function fbListenOnce(path, cb){
-  const f=fb();
-  if(!f){ window.addEventListener('fb-ready',()=>fbListenOnce(path,cb),{once:true}); return; }
-  const r=f.ref(f.db,path);
-  f.onValue(r,snap=>cb(snap.val()||{}),{onlyOnce:true});
-}
-
-// ── SCHERMATA NOME ──
-function loadNomi(){
-  fbListenOnce('dipendenti', data=>{
-    const nomi=Object.values(data).sort((a,b)=>a.name.localeCompare(b.name));
-    const box=document.getElementById('nomeList');
-    if(!nomi.length){
-      box.innerHTML='<div class="empty">Nessun dipendente configurato.<br>L\'admin deve aggiungerli prima.</div>';
+// ══ STATO OGGI (dipendente) ══
+async function caricaStatoOggi(nome) {
+  const docId = nome + '_' + oggi();
+  const el = document.getElementById('status-timbrature');
+  try {
+    const doc = await db.collection('presenze').doc(docId).get();
+    if (!doc.exists || !doc.data().timbrature?.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-ico">🕐</div>Nessuna timbratura oggi</div>';
       return;
     }
-    box.innerHTML=nomi.map(n=>`
-      <button class="nome-btn" onclick="selezionaNome('${n.id}','${n.name}')">${n.name}</button>
-    `).join('');
-  });
-}
-
-function selezionaNome(id, name){
-  currentUser={uid:id, name, isAdmin:false};
-  avviaApp();
-}
-
-// ── PIN ADMIN ──
-function showAdminPin(){
-  pinBuf=''; updateDots();
-  document.getElementById('pinErr').textContent='';
-  document.getElementById('adminScreen').style.display='flex';
-}
-
-function hideAdminPin(){
-  document.getElementById('adminScreen').style.display='none';
-}
-
-function pk(n){ if(pinBuf.length>=4) return; pinBuf+=n.toString(); updateDots(); if(pinBuf.length===4) setTimeout(checkAdminPin,200); }
-function pd(){ pinBuf=pinBuf.slice(0,-1); updateDots(); }
-function updateDots(){ for(let i=0;i<4;i++){ const d=document.getElementById('d'+i); if(d) d.className='pin-dot'+(i<pinBuf.length?' filled':''); } }
-
-function checkAdminPin(){
-  if(pinBuf===PIN_ADMIN){
-    hideAdminPin();
-    currentUser={uid:'admin',name:'Daniele',isAdmin:true};
-    avviaApp();
-  } else {
-    document.getElementById('pinErr').textContent='PIN non valido';
-    pinBuf=''; updateDots();
+    const timb = doc.data().timbrature;
+    const icone = {entrata:'🟢',uscita:'🔴',ferie:'🏖️',malattia:'🤒'};
+    const colori = {entrata:'var(--success)',uscita:'var(--danger)',ferie:'var(--gold)',malattia:'#ff9999'};
+    el.innerHTML = timb.map(t =>
+      '<div class="status-row"><span class="status-tipo" style="color:' + (colori[t.tipo]||'#fff') + '">' + (icone[t.tipo]||'•') + ' ' + t.tipo.charAt(0).toUpperCase()+t.tipo.slice(1) + '</span><span class="status-ora">' + t.ora + '</span></div>'
+    ).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--danger);font-size:0.8rem">Errore caricamento</div>';
   }
 }
 
-// ── AVVIA APP ──
-function avviaApp(){
-  document.getElementById('nomeScreen').style.display='none';
-  document.getElementById('appScreen').style.display='block';
-  document.getElementById('hdrName').textContent=currentUser.name+' · Esci';
-  if(currentUser.isAdmin){
-    document.getElementById('tab2').style.display='flex';
-    document.getElementById('tab3').style.display='flex';
-  }
-  loadOggi();
-}
-
-function doLogout(){
-  if(!confirm('Vuoi uscire?')) return;
-  currentUser=null; ultimaTimbrata=null;
-  document.getElementById('appScreen').style.display='none';
-  document.getElementById('nomeScreen').style.display='flex';
-  showTab(0);
-}
-
-// ── TABS ──
-function showTab(n){
-  document.querySelectorAll('.sec').forEach((s,i)=>s.className='sec'+(i===n?' on':''));
-  document.querySelectorAll('.tab').forEach((t,i)=>t.className='tab'+(i===n?' on':''));
-  if(n===1) loadStorico();
-  if(n===2) loadTeam();
-  if(n===3) renderOps();
-}
-
-// ── TIMBRA ──
-async function timbra(){
-  if(!currentUser) return;
-  const btn=document.getElementById('btnTimbra');
-  const status=document.getElementById('timbraStatus');
-  btn.disabled=true;
-  status.textContent='Connessione...';
-  const ok2=await waitFb();
-  if(!ok2){ status.textContent='⚠️ Nessuna connessione. Riprova.'; btn.disabled=false; return; }
-  const tipo=ultimaTimbrata==='entrata'?'uscita':'entrata';
-  status.textContent='Salvataggio...';
-  const ok=await fbWrite('timbrature',{
-    uid:currentUser.uid, nome:currentUser.name, tipo,
-    data:today(), ora:nowTime(), timestamp:Date.now()
-  });
-  if(ok){
-    ultimaTimbrata=tipo;
-    aggiornaBtnTimbra();
-    status.textContent=tipo==='entrata'?`✅ Entrata registrata alle ${nowTime()}`:`✅ Uscita registrata alle ${nowTime()}`;
-    loadOggi();
-  } else {
-    status.textContent='❌ Errore. Riprova.';
-  }
-  btn.disabled=false;
-}
-
-function aggiornaBtnTimbra(){
-  const btn=document.getElementById('btnTimbra');
-  const lbl=document.getElementById('btnLabel');
-  if(ultimaTimbrata==='entrata'){
-    btn.className='btn-timbra uscita';
-    btn.querySelector('.ic').textContent='🔴';
-    lbl.textContent='Timbra Uscita';
-  } else {
-    btn.className='btn-timbra';
-    btn.querySelector('.ic').textContent='🟢';
-    lbl.textContent='Timbra Entrata';
-  }
-}
-
-function loadOggi(){
-  if(!currentUser) return;
-  fbListen('timbrature', data=>{
-    const todayStr=today();
-    const items=Object.values(data).filter(t=>t.uid===currentUser.uid&&t.data===todayStr).sort((a,b)=>a.timestamp-b.timestamp);
-    if(items.length>0){ ultimaTimbrata=items[items.length-1].tipo; aggiornaBtnTimbra(); }
-    const box=document.getElementById('oggiList');
-    if(!items.length){ box.innerHTML='<div class="empty">Nessuna timbrata oggi</div>'; return; }
-    box.innerHTML=items.map(t=>`
-      <div class="li">
-        <div class="li-name">${t.tipo==='entrata'?'🟢 Entrata':'🔴 Uscita'}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:0.9rem;color:${t.tipo==='entrata'?'var(--teal-l)':'var(--danger)'}">${t.ora}</div>
-      </div>`).join('');
-    const entrata=items.find(t=>t.tipo==='entrata');
-    const uscita=items.filter(t=>t.tipo==='uscita').pop();
-    if(entrata&&uscita){
-      const [eh,em]=entrata.ora.split(':').map(Number);
-      const [uh,um]=uscita.ora.split(':').map(Number);
-      const min=(uh*60+um)-(eh*60+em);
-      if(min>0) box.innerHTML+=`<div style="text-align:center;padding:10px;color:var(--gold);font-size:0.82rem;border-top:1px solid var(--border);margin-top:6px">⏱️ Totale oggi: ${Math.floor(min/60)}h ${min%60}m</div>`;
-    }
-  },20);
-}
-
-// ── STORICO ──
-function loadStorico(){
-  if(!currentUser) return;
-  fbListen('timbrature', data=>{
-    const items=Object.values(data).filter(t=>t.uid===currentUser.uid).sort((a,b)=>b.timestamp-a.timestamp);
-    const box=document.getElementById('storicoList');
-    if(!items.length){ box.innerHTML='<div class="empty">Nessuna timbrata trovata</div>'; return; }
-    const byDate={};
-    items.forEach(t=>{ if(!byDate[t.data]) byDate[t.data]=[]; byDate[t.data].push(t); });
-    box.innerHTML=Object.entries(byDate).map(([data,ts])=>`
-      <div style="margin-bottom:14px">
-        <div style="font-size:0.72rem;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${fmtDate(data)}</div>
-        ${ts.sort((a,b)=>a.timestamp-b.timestamp).map(t=>`
-          <div class="li">
-            <div class="li-name">${t.tipo==='entrata'?'🟢':'🔴'} ${t.tipo}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:var(--muted)">${t.ora}</div>
-          </div>`).join('')}
-      </div>`).join('<hr style="border-color:var(--border);margin:12px 0">');
-  },100);
-}
-
-// ── TEAM ──
-function loadTeam(){
-  fbListen('timbrature', data=>{
-    const todayStr=today();
-    const items=Object.values(data);
-    const oggi=items.filter(t=>t.data===todayStr);
-    const byUid={};
-    oggi.forEach(t=>{ if(!byUid[t.uid]) byUid[t.uid]={nome:t.nome,items:[]}; byUid[t.uid].items.push(t); });
-    const inServizio=Object.values(byUid).filter(u=>{ const last=u.items.sort((a,b)=>b.timestamp-a.timestamp)[0]; return last?.tipo==='entrata'; }).length;
-    document.getElementById('statPresenti').textContent=inServizio;
-    document.getElementById('statOggi').textContent=oggi.length;
-    const boxOggi=document.getElementById('teamOggi');
-    if(!Object.keys(byUid).length){ boxOggi.innerHTML='<div class="empty">Nessuna presenza oggi</div>'; }
-    else {
-      boxOggi.innerHTML=Object.values(byUid).map(u=>{
-        const sorted=u.items.sort((a,b)=>a.timestamp-b.timestamp);
-        const entrata=sorted.find(t=>t.tipo==='entrata');
-        const uscita=[...sorted].reverse().find(t=>t.tipo==='uscita');
-        const inSrv=!uscita||(entrata&&entrata.timestamp>(uscita?.timestamp||0));
-        return `<div class="li">
-          <div><div class="li-name">${inSrv?'<span class="servizio-dot"></span>':''}${u.nome}</div>
-          <div class="li-meta">${entrata?'Entrata '+entrata.ora:'—'}${uscita?' · Uscita '+uscita.ora:''}</div></div>
-          <span class="badge ${inSrv?'badge-green':'badge-red'}">${inSrv?'IN SERVIZIO':'USCITO'}</span>
-        </div>`;
-      }).join('');
-    }
-    const byNome={};
-    items.forEach(t=>{ if(!byNome[t.nome]) byNome[t.nome]={e:0,u:0}; byNome[t.nome][t.tipo==='entrata'?'e':'u']++; });
-    const boxSett=document.getElementById('teamSett');
-    boxSett.innerHTML=Object.entries(byNome).map(([nome,s])=>`
-      <div class="li"><div class="li-name">${nome}</div>
-      <div style="font-size:0.78rem;color:var(--muted)">${s.e}🟢 · ${s.u}🔴</div></div>`).join('')||'<div class="empty">Nessun dato</div>';
-  },200);
-}
-
-// ── GESTIONE ──
-async function addOp(){
-  const name=document.getElementById('newOpName').value.trim();
-  if(!name){ alert('Inserisci il nome'); return; }
-  const ok=await waitFb();
-  if(!ok){ alert('Connessione non disponibile'); return; }
-  const f=fb();
-  const opId=uid();
+// ══ PRESENZE OGGI (admin) ══
+async function caricaOggi() {
+  const el = document.getElementById('oggi-lista');
+  const dataEl = document.getElementById('oggi-data');
+  dataEl.textContent = fmtData(oggi());
+  el.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div>Caricamento...</div>';
   try {
-    await f.set(f.ref(f.db,'dipendenti/'+opId),{id:opId,name});
-    document.getElementById('newOpName').value='';
-    alert(`✅ ${name} aggiunto! Ora appare nella lista.`);
-    renderOps();
-  } catch(e){ alert('Errore: '+e.message); }
+    const snap = await db.collection('presenze').where('data','==',oggi()).get();
+    const mappa = {};
+    snap.forEach(d => { mappa[d.data().nome] = d.data(); });
+
+    el.innerHTML = DIPENDENTI.map(dip => {
+      const dati = mappa[dip.nome];
+      const timb = dati?.timbrature || [];
+      const ultima = timb.length ? timb[timb.length-1] : null;
+      const icone = {entrata:'🟢',uscita:'🔴',ferie:'🏖️',malattia:'🤒'};
+      const cls = ultima ? 'stato-'+ultima.tipo : 'stato-assente';
+      const testo = ultima
+        ? (icone[ultima.tipo]||'') + ' ' + ultima.tipo.charAt(0).toUpperCase()+ultima.tipo.slice(1) + ' ' + ultima.ora
+        : '— Non presente';
+
+      // Calcola ore se c'è entrata e uscita
+      let oreExtra = '';
+      const entrata = timb.find(t => t.tipo==='entrata');
+      const uscita = timb.find(t => t.tipo==='uscita');
+      if (entrata && uscita) {
+        const [he,me] = entrata.ora.split(':').map(Number);
+        const [hu,mu] = uscita.ora.split(':').map(Number);
+        const ore = ((hu*60+mu)-(he*60+me))/60;
+        oreExtra = '<div style="font-size:0.65rem;color:var(--teal-l);margin-top:2px">⏱ ' + ore.toFixed(1) + 'h lavorate</div>';
+      }
+
+      return '<div class="dip-row"><div><div class="dip-nome">' + dip.ico + ' ' + dip.nome + '</div><div class="dip-rep">' + dip.reparto + '</div>' + oreExtra + '</div><div class="dip-stato ' + cls + '">' + testo + '</div></div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--danger);font-size:0.82rem;padding:12px">Errore: ' + e.message + '</div>';
+  }
 }
 
-async function delOp(id){
-  if(!confirm('Eliminare questo dipendente?')) return;
-  const f=fb(); if(!f) return;
-  try { await f.set(f.ref(f.db,'dipendenti/'+id),null); renderOps(); }
-  catch(e){ alert('Errore: '+e.message); }
+// ══ PIN ADMIN ══
+function pinTasto(c) {
+  if (pinCorrente.length >= 4) return;
+  pinCorrente += c;
+  document.getElementById('pin-display').textContent = '●'.repeat(pinCorrente.length) + '—'.repeat(4-pinCorrente.length);
+}
+function pinCanc() {
+  pinCorrente = '';
+  document.getElementById('pin-display').textContent = '——';
+}
+function pinOk() {
+  if (pinCorrente === PIN_ADMIN) {
+    document.getElementById('sc-report-pin').style.display = 'none';
+    document.getElementById('sc-report-body').style.display = 'block';
+    pinCorrente = '';
+    document.getElementById('pin-display').textContent = '——';
+    popolaMesi();
+    caricaReport();
+  } else {
+    mostraToast('❌ PIN errato');
+    pinCanc();
+  }
 }
 
-function renderOps(){
-  const f=fb(); if(!f) return;
-  f.onValue(f.ref(f.db,'dipendenti'), snap=>{
-    const data=snap.val()||{};
-    const ops=Object.values(data);
-    const box=document.getElementById('opsList');
-    if(!ops.length){ box.innerHTML='<div class="empty">Nessun dipendente</div>'; return; }
-    box.innerHTML=ops.sort((a,b)=>a.name.localeCompare(b.name)).map(o=>`
-      <div class="li">
-        <div class="li-name">${o.name}</div>
-        <button data-id="${o.id}" onclick="delOp(this.dataset.id)" style="background:var(--danger);border:none;color:#fff;border-radius:8px;padding:5px 10px;font-size:0.75rem;cursor:pointer">🗑</button>
-      </div>`).join('');
-  });
+// ══ REPORT ══
+function popolaMesi() {
+  const sel = document.getElementById('mese-sel');
+  sel.innerHTML = '';
+  const ora = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(ora.getFullYear(), ora.getMonth()-i, 1);
+    const val = d.toISOString().slice(0,7);
+    const label = d.toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+    sel.innerHTML += '<option value="' + val + '">' + label.charAt(0).toUpperCase()+label.slice(1) + '</option>';
+  }
 }
 
-// Init
-window.addEventListener('load', ()=>{
-  loadNomi();
-});
+async function caricaReport() {
+  const mese = document.getElementById('mese-sel').value;
+  const el = document.getElementById('report-contenuto');
+  el.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div>Caricamento...</div>';
+  try {
+    const inizio = mese + '-01';
+    const fine = mese + '-31';
+    const snap = await db.collection('presenze')
+      .where('data','>=',inizio)
+      .where('data','<=',fine)
+      .get();
+
+    // Raggruppa per dipendente
+    const datiDip = {};
+    DIPENDENTI.forEach(d => { datiDip[d.nome] = {giorni:[], ferie:0, malattia:0, giorniLav:0, oreTotal:0}; });
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (!datiDip[d.nome]) return;
+      const timb = d.timbrature || [];
+      const haFerie = timb.some(t => t.tipo==='ferie');
+      const haMalattia = timb.some(t => t.tipo==='malattia');
+      const entrata = timb.find(t => t.tipo==='entrata');
+      const uscita = timb.find(t => t.tipo==='uscita');
+      if (haFerie) datiDip[d.nome].ferie++;
+      else if (haMalattia) datiDip[d.nome].malattia++;
+      else if (entrata) {
+        datiDip[d.nome].giorniLav++;
+        if (uscita) {
+          const [he,me] = entrata.ora.split(':').map(Number);
+          const [hu,mu] = uscita.ora.split(':').map(Number);
+          datiDip[d.nome].oreTotal += ((hu*60+mu)-(he*60+me))/60;
+        }
+      }
+      datiDip[d.nome].giorni.push(d.data);
+    });
+
+    // Renderizza
+    const nomeMese = new Date(mese+'-15').toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+    el.innerHTML = '<div style="font-weight:700;color:var(--gold);margin-bottom:14px;text-align:center">' + nomeMese.charAt(0).toUpperCase()+nomeMese.slice(1) + '</div>' +
+      DIPENDENTI.map(dip => {
+        const r = datiDip[dip.nome];
+        return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">' +
+          '<div style="font-weight:700;color:#fff;margin-bottom:10px">' + dip.ico + ' ' + dip.nome + ' <span style="font-size:0.68rem;color:var(--muted);font-weight:400">(' + dip.reparto + ')</span></div>' +
+          '<table class="rep-table"><thead><tr><th>Giorni lav.</th><th>Ore tot.</th><th>Ferie</th><th>Malattia</th></tr></thead>' +
+          '<tbody><tr>' +
+          '<td style="color:var(--success);font-weight:700">' + r.giorniLav + '</td>' +
+          '<td style="color:var(--teal-l);font-weight:700">' + r.oreTotal.toFixed(1) + 'h</td>' +
+          '<td style="color:var(--gold);font-weight:700">' + r.ferie + '</td>' +
+          '<td style="color:var(--danger);font-weight:700">' + r.malattia + '</td>' +
+          '</tr></tbody></table></div>';
+      }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--danger);font-size:0.82rem">Errore: ' + e.message + '</div>';
+  }
+}
+
+// ══ SCARICA PDF ══
+function scaricaPDF() {
+  const mese = document.getElementById('mese-sel').value;
+  const contenuto = document.getElementById('report-contenuto').innerText;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text("L'Ancora — Report Presenze", 20, 20);
+  doc.setFontSize(12);
+  doc.setFont('helvetica','normal');
+  const nomeMese = new Date(mese+'-15').toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+  doc.text('Mese: ' + nomeMese, 20, 32);
+  doc.setFontSize(10);
+  const righe = doc.splitTextToSize(contenuto, 170);
+  doc.text(righe, 20, 45);
+  doc.save('presenze_' + mese + '.pdf');
+}
+
+// ══ TOAST ══
+function mostraToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ══ INIT ══
+document.getElementById('data-oggi').textContent = fmtData(oggi());
 </script>
+
 </body>
 </html>
