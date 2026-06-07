@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Presenze - Roberta">
+<title>Presenze — Roberta</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root{
+  --navy:#0d1f2d;--ocean:#1a3a4a;--teal:#0e7c7b;--teal-l:#12a09f;
+  --gold:#c9a84c;--gold-l:#e8c97a;--danger:#e05c5c;--success:#4caf82;
+  --muted:#8aa0ad;--card:#112232;--border:rgba(14,124,123,0.25)
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif;background:var(--navy);color:#fff;min-height:100vh;overflow-x:hidden;padding:20px 16px 40px}
+
+.hdr{text-align:center;padding:24px 0 20px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.hdr-logo{font-family:'Playfair Display',serif;font-size:1.4rem;color:var(--gold)}
+.hdr-nome{font-size:1.1rem;font-weight:600;color:#fff;margin-top:8px}
+.hdr-rep{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px}
+.hdr-data{font-size:0.82rem;color:var(--teal-l);margin-top:6px}
+.hdr-ora{font-size:2rem;font-weight:700;color:#fff;margin-top:4px;font-family:'Playfair Display',serif}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+.card-t{font-family:'Playfair Display',serif;font-size:0.95rem;color:var(--gold);margin-bottom:14px}
+
+/* BOTTONI AZIONE GRANDI */
+.azioni-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.az-btn{border:none;border-radius:16px;padding:26px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;transition:all 0.2s;text-align:center;width:100%}
+.az-btn:active{transform:scale(0.94)}
+.az-btn .az-ico{font-size:2.2rem;display:block;margin-bottom:8px}
+.az-entrata{background:var(--success);color:#fff;box-shadow:0 4px 20px rgba(76,175,130,0.4)}
+.az-uscita{background:var(--danger);color:#fff;box-shadow:0 4px 20px rgba(224,92,92,0.4)}
+.az-ferie{background:rgba(201,168,76,0.15);border:2px solid var(--gold);color:var(--gold-l)}
+.az-malattia{background:rgba(224,92,92,0.1);border:2px solid rgba(224,92,92,0.5);color:#ff9999}
+
+/* STATUS */
+.status-empty{text-align:center;padding:20px;color:var(--muted);font-size:0.85rem}
+.status-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);margin-bottom:6px;border-left:3px solid var(--border)}
+.status-row.entrata{border-left-color:var(--success)}
+.status-row.uscita{border-left-color:var(--danger)}
+.status-row.ferie{border-left-color:var(--gold)}
+.status-row.malattia{border-left-color:#ff6666}
+.status-tipo{font-size:0.88rem;font-weight:600}
+.status-ora{font-size:0.82rem;color:var(--muted);font-weight:500}
+
+/* TOAST */
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--teal);color:#fff;padding:14px 28px;border-radius:30px;font-size:0.92rem;font-weight:600;z-index:999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.toast.show{opacity:1}
+
+/* BADGE TEST */
+.badge-test{background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:20px;padding:6px 14px;font-size:0.7rem;color:var(--gold);text-align:center;margin-bottom:16px}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">🍽️ L'Ancora</div>
+  <div class="hdr-nome">Roberta</div>
+  <div class="hdr-rep">Sala</div>
+  <div class="hdr-data" id="data-oggi"></div>
+  <div class="hdr-ora" id="ora-display"></div>
+</div>
+
+<div class="badge-test">🧪 Versione di prova</div>
+
+<!-- BOTTONI TIMBRA -->
+<div class="card">
+  <div class="card-t">Timbratura</div>
+  <div class="azioni-grid">
+    <button class="az-btn az-entrata" onclick="timbra('entrata')">
+      <span class="az-ico">🟢</span>Entrata
+    </button>
+    <button class="az-btn az-uscita" onclick="timbra('uscita')">
+      <span class="az-ico">🔴</span>Uscita
+    </button>
+    <button class="az-btn az-ferie" onclick="timbra('ferie')">
+      <span class="az-ico">🏖️</span>Ferie
+    </button>
+    <button class="az-btn az-malattia" onclick="timbra('malattia')">
+      <span class="az-ico">🤒</span>Malattia
+    </button>
+  </div>
+</div>
+
+<!-- STATO OGGI -->
+<div class="card">
+  <div class="card-t">Le tue timbrature di oggi</div>
+  <div id="status-box">
+    <div class="status-empty">🕐 Nessuna timbratura ancora</div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══ FIREBASE ══
+const firebaseConfig = {
+  apiKey: "AIzaSyCiq4s0XNvXWe90VU1cYIZ8KyXLJpD3OXM",
+  authDomain: "lancora-haccp.firebaseapp.com",
+  databaseURL: "https://lancora-haccp-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "lancora-haccp",
+  storageBucket: "lancora-haccp.firebasestorage.app",
+  messagingSenderId: "263121790360",
+  appId: "1:263121790360:web:18fbd1a9c0dff6809eb7ed"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const NOME = 'Roberta';
+
+// ══ UTILS ══
+function oggi() { return new Date().toISOString().slice(0,10); }
+function oraAdesso() { return new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); }
+
+// ══ OROLOGIO ══
+function tick() {
+  document.getElementById('ora-display').textContent = oraAdesso();
+}
+setInterval(tick, 1000); tick();
+
+document.getElementById('data-oggi').textContent =
+  new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+// ══ TIMBRA ══
+async function timbra(tipo) {
+  const ora = oraAdesso();
+  const docId = NOME + '_' + oggi();
+  try {
+    const ref = db.collection('presenze').doc(docId);
+    const doc = await ref.get();
+    const dati = doc.exists ? doc.data() : {nome:NOME, data:oggi(), timbrature:[]};
+    dati.timbrature = dati.timbrature || [];
+
+    // Controllo: non timbrare due volte entrata senza uscita
+    const timb = dati.timbrature;
+    if (tipo === 'entrata' && timb.some(t => t.tipo === 'entrata' && !timb.some(u => u.tipo === 'uscita' && u.ts > t.ts))) {
+      mostraToast('⚠️ Hai già timbrato entrata!'); return;
+    }
+
+    dati.timbrature.push({tipo, ora, ts: Date.now()});
+    await ref.set(dati);
+
+    const msg = {
+      entrata:  '✅ Entrata registrata alle ' + ora,
+      uscita:   '✅ Uscita registrata alle ' + ora,
+      ferie:    '🏖️ Ferie registrate per oggi',
+      malattia: '🤒 Malattia registrata per oggi'
+    }[tipo];
+    mostraToast(msg);
+    caricaStato();
+  } catch(e) {
+    mostraToast('❌ Errore: ' + e.message);
+  }
+}
+
+// ══ CARICA STATO ══
+async function caricaStato() {
+  const el = document.getElementById('status-box');
+  try {
+    const doc = await db.collection('presenze').doc(NOME + '_' + oggi()).get();
+    if (!doc.exists || !doc.data().timbrature?.length) {
+      el.innerHTML = '<div class="status-empty">🕐 Nessuna timbratura ancora</div>';
+      return;
+    }
+    const timb = doc.data().timbrature;
+    const icone = {entrata:'🟢',uscita:'🔴',ferie:'🏖️',malattia:'🤒'};
+    const etichette = {entrata:'Entrata',uscita:'Uscita',ferie:'Ferie',malattia:'Malattia'};
+
+    // Calcola ore se entrata+uscita
+    let oreHtml = '';
+    const entrata = timb.find(t => t.tipo==='entrata');
+    const uscita = [...timb].reverse().find(t => t.tipo==='uscita');
+    if (entrata && uscita) {
+      const [he,me] = entrata.ora.split(':').map(Number);
+      const [hu,mu] = uscita.ora.split(':').map(Number);
+      const ore = ((hu*60+mu)-(he*60+me)/1)/60;
+      oreHtml = '<div style="margin-top:10px;padding:10px;background:rgba(14,124,123,0.1);border-radius:10px;text-align:center;color:var(--teal-l);font-weight:600">⏱️ Ore lavorate: ' + ore.toFixed(1) + 'h</div>';
+    }
+
+    el.innerHTML = timb.map(t =>
+      '<div class="status-row ' + t.tipo + '">' +
+      '<span class="status-tipo">' + (icone[t.tipo]||'') + ' ' + (etichette[t.tipo]||t.tipo) + '</span>' +
+      '<span class="status-ora">' + t.ora + '</span></div>'
+    ).join('') + oreHtml;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--danger);font-size:0.8rem;padding:10px">Errore caricamento</div>';
+  }
+}
+
+// ══ TOAST ══
+function mostraToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ══ INIT ══
+caricaStato();
+</script>
+</body>
+</html>
