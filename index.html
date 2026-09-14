@@ -2,539 +2,450 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Presenze Ancora">
-<title>L'Ancora — Presenze</title>
+<meta name="apple-mobile-web-app-title" content="Presenze Admin">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1f2d">
+<title>L'Ancora — Presenze (Admin)</title>
+<link rel="stylesheet" href="stile.css">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-:root{
-  --navy:#0d1f2d;--ocean:#1a3a4a;--teal:#0e7c7b;--teal-l:#12a09f;
-  --gold:#c9a84c;--gold-l:#e8c97a;--danger:#e05c5c;--success:#4caf82;
-  --muted:#8aa0ad;--card:#112232;--border:rgba(14,124,123,0.25)
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'DM Sans',sans-serif;background:var(--navy);color:#fff;min-height:100vh;overflow-x:hidden}
-
-/* HEADER */
-.hdr{background:linear-gradient(135deg,var(--ocean),var(--navy));padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
-.hdr-logo{font-family:'Playfair Display',serif;font-size:1.2rem;color:var(--gold)}
-.hdr-sub{font-size:0.6rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.hdr-ora{font-size:0.78rem;color:var(--teal-l);font-weight:500}
-
-/* SCHERMATE */
-.screen{display:none;padding:20px 16px;min-height:calc(100vh - 70px)}
-.screen.on{display:block}
-
-/* CARD */
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
-.card-t{font-family:'Playfair Display',serif;font-size:1rem;color:var(--gold);margin-bottom:14px}
-
-/* BOTTONI NOMI */
-.nomi-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
-.nome-btn{background:var(--card);border:2px solid var(--border);border-radius:16px;padding:22px 10px;cursor:pointer;text-align:center;transition:all 0.2s;font-family:'DM Sans',sans-serif}
-.nome-btn:active{transform:scale(0.96)}
-.nome-btn.cucina{border-color:rgba(14,124,123,0.5)}
-.nome-btn.sala{border-color:rgba(201,168,76,0.5)}
-.nome-btn .nome-ico{font-size:2.2rem;margin-bottom:6px}
-.nome-btn .nome-txt{font-size:1rem;font-weight:600;color:#fff}
-.nome-btn .nome-rep{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
-.nome-btn.selected.cucina{background:rgba(14,124,123,0.2);border-color:var(--teal-l)}
-.nome-btn.selected.sala{background:rgba(201,168,76,0.12);border-color:var(--gold)}
-.nome-full{grid-column:1/-1}
-
-/* BOTTONI AZIONE */
-.azioni-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.az-btn{border:none;border-radius:14px;padding:20px 10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.95rem;font-weight:600;transition:all 0.2s;text-align:center}
-.az-btn:active{transform:scale(0.96)}
-.az-btn .az-ico{font-size:1.8rem;display:block;margin-bottom:6px}
-.az-entrata{background:var(--success);color:#fff}
-.az-uscita{background:var(--danger);color:#fff}
-.az-ferie{background:rgba(201,168,76,0.2);border:2px solid var(--gold);color:var(--gold-l)}
-.az-malattia{background:rgba(224,92,92,0.15);border:2px solid var(--danger);color:#ff9999}
-
-/* STATUS */
-.status-box{background:rgba(14,124,123,0.1);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
-.status-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
-.status-row:last-child{border-bottom:none}
-.status-tipo{font-size:0.82rem;font-weight:600}
-.status-ora{font-size:0.78rem;color:var(--muted)}
-
-/* LISTA DIPENDENTI ADMIN */
-.dip-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:11px;background:rgba(255,255,255,0.04);margin-bottom:8px;border:1px solid var(--border)}
-.dip-nome{font-weight:600;font-size:0.9rem}
-.dip-rep{font-size:0.65rem;color:var(--muted);margin-top:2px}
-.dip-stato{font-size:0.8rem;font-weight:600}
-.stato-entrata{color:var(--success)}
-.stato-uscita{color:var(--danger)}
-.stato-ferie{color:var(--gold)}
-.stato-malattia{color:#ff9999}
-.stato-assente{color:var(--muted)}
-
-/* REPORT TABELLA */
-.rep-table{width:100%;border-collapse:collapse;font-size:0.78rem}
-.rep-table th{text-align:left;padding:8px 6px;color:var(--muted);border-bottom:1px solid var(--border);font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px}
-.rep-table td{padding:9px 6px;border-bottom:1px solid rgba(14,124,123,0.1)}
-.rep-table tr:last-child td{border-bottom:none}
-
-/* BUTTONS */
-.btn{display:block;width:100%;padding:13px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;text-align:center;transition:opacity 0.2s,transform 0.1s;margin-top:10px}
-.btn:active{transform:scale(0.98)}
-.btn-g{background:var(--gold);color:var(--navy)}
-.btn-t{background:var(--teal);color:#fff}
-.btn-d{background:var(--danger);color:#fff}
-.btn-o{background:transparent;border:1px solid var(--border);color:var(--muted)}
-.btn-sm{display:inline-block;width:auto;padding:7px 14px;font-size:0.78rem;margin-top:0}
-
-/* NAV BOTTOM */
-.nav{position:fixed;bottom:0;left:0;right:0;background:var(--ocean);border-top:1px solid var(--border);display:flex;z-index:200;padding-bottom:env(safe-area-inset-bottom)}
-.nb{flex:1;padding:8px 2px 12px;background:none;border:none;color:var(--muted);font-size:0.6rem;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color 0.2s;font-family:'DM Sans',sans-serif}
-.nb .ic{font-size:1.3rem}
-.nb.on{color:var(--gold)}
-
-/* FORM */
-label{display:block;font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;margin-top:12px}
-input,select{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:9px;padding:11px 13px;color:#fff;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
-input:focus,select:focus{border-color:var(--teal-l)}
-select option{background:var(--ocean)}
-
-/* TOAST */
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--teal);color:#fff;padding:12px 24px;border-radius:30px;font-size:0.88rem;font-weight:600;z-index:999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none}
-.toast.show{opacity:1}
-
-/* EMPTY */
-.empty{text-align:center;padding:30px 20px;color:var(--muted);font-size:0.85rem}
-.empty-ico{font-size:2.5rem;margin-bottom:10px}
-
-/* PIN */
-.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto}
-.pin-btn{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:1.2rem;font-weight:600;cursor:pointer;text-align:center;color:#fff;font-family:'DM Sans',sans-serif}
-.pin-btn:active{background:var(--teal);border-color:var(--teal)}
-.pin-display{text-align:center;font-size:2rem;letter-spacing:8px;color:var(--gold);margin-bottom:20px;min-height:40px}
-
-body{padding-bottom:70px}
-</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
-<!-- HEADER -->
-<header class="hdr">
-  <div>
-    <div class="hdr-logo">L'Ancora</div>
-    <div class="hdr-sub">Registro Presenze</div>
+<!-- ══ PIN ══ -->
+<div class="wrap" id="v-pin">
+  <div class="hdr"><div class="hdr-logo">L'Ancora</div><div class="hdr-rep">Presenze — Area riservata</div></div>
+  <div class="card centro">
+    <div class="piccolo muted">Inserisci il PIN</div>
+    <div class="pin-display" id="pin-display">––––</div>
+    <div class="pin-grid" id="pin-grid"></div>
   </div>
-  <div class="hdr-ora" id="oraCorrente"></div>
-</header>
+</div>
 
-<!-- ══ SCHERMATA: TIMBRA ══ -->
-<div class="screen on" id="sc-timbra">
-  <div style="text-align:center;margin-bottom:20px">
-    <div style="font-size:1.1rem;font-weight:600;color:var(--gold)" id="data-oggi"></div>
-    <div style="font-size:0.78rem;color:var(--muted);margin-top:4px">Seleziona il tuo nome e timbra</div>
-  </div>
-
-  <!-- Selezione nome -->
-  <div class="nomi-grid">
-    <button class="nome-btn cucina" onclick="selNome('Adam',this)">
-      <div class="nome-ico">👨‍🍳</div>
-      <div class="nome-txt">Adam</div>
-      <div class="nome-rep">Cucina</div>
-    </button>
-    <button class="nome-btn cucina" onclick="selNome('Alessio',this)">
-      <div class="nome-ico">👨‍🍳</div>
-      <div class="nome-txt">Alessio</div>
-      <div class="nome-rep">Cucina</div>
-    </button>
-    <button class="nome-btn cucina" onclick="selNome('Dalia',this)">
-      <div class="nome-ico">👩‍🍳</div>
-      <div class="nome-txt">Dalia</div>
-      <div class="nome-rep">Cucina</div>
-    </button>
-    <button class="nome-btn sala" onclick="selNome('Roberta',this)">
-      <div class="nome-ico">🍽️</div>
-      <div class="nome-txt">Roberta</div>
-      <div class="nome-rep">Sala</div>
-    </button>
-    <button class="nome-btn sala nome-full" onclick="selNome('Stefano',this)">
-      <div class="nome-ico">🍽️</div>
-      <div class="nome-txt">Stefano</div>
-      <div class="nome-rep">Sala</div>
-    </button>
+<!-- ══ ADMIN ══ -->
+<div class="wrap wrap-largo" id="v-admin" hidden>
+  <div class="hdr" style="display:flex;justify-content:space-between;align-items:center;text-align:left">
+    <div><div class="hdr-logo">L'Ancora</div><div class="hdr-rep">Registro presenze</div></div>
+    <div style="text-align:right">
+      <div id="badge-modo"></div>
+      <button class="btn btn-o btn-sm" style="margin-top:6px" onclick="esci()">🔒 Esci</button>
+    </div>
   </div>
 
-  <!-- Stato oggi -->
-  <div id="stato-oggi-box" style="display:none">
+  <div class="tabs">
+    <button class="tab on" data-tab="oggi" onclick="apriTab('oggi')">👥 Oggi</button>
+    <button class="tab" data-tab="report" onclick="apriTab('report')">📊 Report mensile</button>
+    <button class="tab" data-tab="link" onclick="apriTab('link')">🔗 Link dipendenti</button>
+  </div>
+
+  <!-- OGGI -->
+  <section id="tab-oggi">
     <div class="card">
-      <div class="card-t" id="stato-nome-label">Le tue timbrature oggi</div>
-      <div class="status-box" id="status-timbrature">
-        <div class="empty"><div class="empty-ico">🕐</div>Nessuna timbratura oggi</div>
-      </div>
-
-      <!-- Azioni -->
-      <div class="azioni-grid">
-        <button class="az-btn az-entrata" onclick="timbra('entrata')">
-          <span class="az-ico">🟢</span>Entrata
-        </button>
-        <button class="az-btn az-uscita" onclick="timbra('uscita')">
-          <span class="az-ico">🔴</span>Uscita
-        </button>
-        <button class="az-btn az-ferie" onclick="timbra('ferie')">
-          <span class="az-ico">🏖️</span>Ferie
-        </button>
-        <button class="az-btn az-malattia" onclick="timbra('malattia')">
-          <span class="az-ico">🤒</span>Malattia
-        </button>
-      </div>
+      <div class="card-t" id="oggi-titolo">Oggi</div>
+      <div id="oggi-lista"><div class="vuoto">Caricamento…</div></div>
     </div>
-  </div>
-</div>
+  </section>
 
-<!-- ══ SCHERMATA: OGGI (ADMIN) ══ -->
-<div class="screen" id="sc-oggi">
-  <div class="card">
-    <div class="card-t">📋 Presenze di Oggi</div>
-    <div id="oggi-data" style="font-size:0.8rem;color:var(--muted);margin-bottom:14px"></div>
-    <div id="oggi-lista">
-      <div class="empty"><div class="empty-ico">👥</div>Caricamento...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ══ SCHERMATA: REPORT ══ -->
-<div class="screen" id="sc-report">
-  <div id="sc-report-pin" style="display:block">
-    <div class="card" style="text-align:center">
-      <div class="card-t">🔐 Area Admin</div>
-      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:20px">Inserisci PIN per accedere ai report</div>
-      <div class="pin-display" id="pin-display">——</div>
-      <div class="pin-grid">
-        <button class="pin-btn" onclick="pinTasto('1')">1</button>
-        <button class="pin-btn" onclick="pinTasto('2')">2</button>
-        <button class="pin-btn" onclick="pinTasto('3')">3</button>
-        <button class="pin-btn" onclick="pinTasto('4')">4</button>
-        <button class="pin-btn" onclick="pinTasto('5')">5</button>
-        <button class="pin-btn" onclick="pinTasto('6')">6</button>
-        <button class="pin-btn" onclick="pinTasto('7')">7</button>
-        <button class="pin-btn" onclick="pinTasto('8')">8</button>
-        <button class="pin-btn" onclick="pinTasto('9')">9</button>
-        <button class="pin-btn" onclick="pinCanc()" style="color:var(--danger)">✕</button>
-        <button class="pin-btn" onclick="pinTasto('0')">0</button>
-        <button class="pin-btn" onclick="pinOk()" style="background:var(--teal);border-color:var(--teal)">✓</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="sc-report-body" style="display:none">
+  <!-- REPORT -->
+  <section id="tab-report" hidden>
     <div class="card">
-      <div class="card-t">📊 Report Mensile</div>
-      <label>Seleziona mese</label>
-      <select id="mese-sel" onchange="caricaReport()"></select>
-      <div id="report-contenuto" style="margin-top:16px"></div>
-      <button class="btn btn-g" onclick="scaricaPDF()" style="margin-top:14px">⬇️ Scarica PDF</button>
-      <button class="btn btn-o" onclick="document.getElementById('sc-report-pin').style.display='block';document.getElementById('sc-report-body').style.display='none'">🔒 Blocca</button>
+      <div class="filtri">
+        <div><label for="sel-dip">Dipendente</label><select id="sel-dip" onchange="caricaReport()"></select></div>
+        <div><label for="sel-mese">Mese</label><select id="sel-mese" onchange="caricaReport()"></select></div>
+        <div class="azioni-export">
+          <button class="btn btn-g" onclick="esportaPDF()">⬇️ PDF</button>
+          <button class="btn btn-t" onclick="esportaExcel()">⬇️ Excel</button>
+        </div>
+      </div>
+      <div class="kpi-riga" id="rep-kpi"></div>
+      <div class="tab-scroll"><table class="rep" id="rep-tabella"></table></div>
+      <div class="piccolo muted" style="margin-top:10px" id="rep-note"></div>
     </div>
-  </div>
+  </section>
+
+  <!-- LINK -->
+  <section id="tab-link" hidden>
+    <div class="card">
+      <div class="card-t">Link personali</div>
+      <div class="piccolo muted" style="margin-bottom:12px">Manda a ogni dipendente solo il suo link. Sul telefono: apri il link → Condividi → "Aggiungi a schermata Home".</div>
+      <div id="link-lista"></div>
+    </div>
+  </section>
 </div>
 
-<!-- ══ NAV BOTTOM ══ -->
-<nav class="nav">
-  <button class="nb on" id="nb-timbra" onclick="showScreen('timbra')">
-    <span class="ic">⏱️</span>Timbra
-  </button>
-  <button class="nb" id="nb-oggi" onclick="showScreen('oggi')">
-    <span class="ic">👥</span>Oggi
-  </button>
-  <button class="nb" id="nb-report" onclick="showScreen('report')">
-    <span class="ic">📊</span>Report
-  </button>
-</nav>
-
-<!-- TOAST -->
+<div id="modale"></div>
 <div class="toast" id="toast"></div>
 
+<script src="presenze-core.js"></script>
 <script>
-// ══ FIREBASE CONFIG ══
-const firebaseConfig = {
-  apiKey: "AIzaSyCiq4s0XNvXWe90VU1cYIZ8KyXLJpD3OXM",
-  authDomain: "lancora-haccp.firebaseapp.com",
-  databaseURL: "https://lancora-haccp-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "lancora-haccp",
-  storageBucket: "lancora-haccp.firebasestorage.app",
-  messagingSenderId: "263121790360",
-  appId: "1:263121790360:web:18fbd1a9c0dff6809eb7ed"
-};
+// ══ PIN ══
+let pin = '';
+document.getElementById('pin-grid').innerHTML =
+  ['1','2','3','4','5','6','7','8','9','✕','0','✓'].map(c =>
+    '<button class="pin-btn" onclick="tastoPin(\'' + c + '\')"' +
+    (c === '✓' ? ' style="background:var(--teal)"' : c === '✕' ? ' style="color:var(--danger)"' : '') + '>' + c + '</button>'
+  ).join('');
 
-// Usa la stessa config del firebase-config.js se disponibile
-let db;
-try {
-  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-} catch(e) {
-  console.error('Firebase init error:', e);
+async function sha256(testo) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(testo));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
-// ══ COSTANTI ══
-const DIPENDENTI = [
-  {nome:'Adam',   reparto:'Cucina', ico:'👨‍🍳'},
-  {nome:'Alessio',reparto:'Cucina', ico:'👨‍🍳'},
-  {nome:'Dalia',  reparto:'Cucina', ico:'👩‍🍳'},
-  {nome:'Roberta',reparto:'Sala',   ico:'🍽️'},
-  {nome:'Stefano',reparto:'Sala',   ico:'🍽️'},
-];
-const PIN_ADMIN = '1503';
-
-// ══ STATO ══
-let nomeSelezionato = null;
-let pinCorrente = '';
-
-// ══ UTILS ══
-function oggi() {
-  return new Date().toISOString().slice(0,10);
+async function tastoPin(c) {
+  if (c === '✕') pin = '';
+  else if (c === '✓') {
+    const tentativo = pin;
+    pin = '';
+    if (await sha256(tentativo) === PIN_ADMIN_SHA256) {
+      try { sessionStorage.setItem('presenze_admin', '1'); } catch (e) {}
+      entra();
+    } else mostraToast('PIN errato', true);
+  } else if (pin.length < 6) pin += c;
+  document.getElementById('pin-display').textContent = pin ? '●'.repeat(pin.length) : '––––';
 }
-function oraAdesso() {
-  return new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-}
-function fmtData(d) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-}
-
-// ══ OROLOGIO ══
-function aggiornaOra() {
-  document.getElementById('oraCorrente').textContent = oraAdesso();
-}
-setInterval(aggiornaOra, 1000);
-aggiornaOra();
-
-// ══ NAVIGAZIONE ══
-function showScreen(nome) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
-  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
-  document.getElementById('sc-' + nome).classList.add('on');
-  document.getElementById('nb-' + nome).classList.add('on');
-  if (nome === 'oggi') caricaOggi();
-}
-
-// ══ SELEZIONE NOME ══
-function selNome(nome, btn) {
-  nomeSelezionato = nome;
-  document.querySelectorAll('.nome-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  document.getElementById('stato-nome-label').textContent = nome + ' — oggi';
-  document.getElementById('stato-oggi-box').style.display = 'block';
-  caricaStatoOggi(nome);
-}
-
-// ══ TIMBRA ══
-async function timbra(tipo) {
-  if (!nomeSelezionato) { mostraToast('Seleziona prima il tuo nome!'); return; }
-  const ora = oraAdesso();
-  const docId = nomeSelezionato + '_' + oggi();
-  try {
-    const ref = db.collection('presenze').doc(docId);
-    const doc = await ref.get();
-    const dati = doc.exists ? doc.data() : {nome: nomeSelezionato, data: oggi(), timbrature: []};
-    dati.timbrature = dati.timbrature || [];
-    dati.timbrature.push({tipo, ora, ts: Date.now()});
-    await ref.set(dati);
-    const msg = {
-      entrata:  '✅ Entrata registrata alle ' + ora,
-      uscita:   '✅ Uscita registrata alle ' + ora,
-      ferie:    '🏖️ Ferie registrate per oggi',
-      malattia: '🤒 Malattia registrata per oggi'
-    }[tipo];
-    mostraToast(msg);
-    caricaStatoOggi(nomeSelezionato);
-  } catch(e) {
-    mostraToast('❌ Errore: ' + e.message);
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('v-pin').hidden) {
+    if (/^[0-9]$/.test(e.key)) tastoPin(e.key);
+    else if (e.key === 'Enter') tastoPin('✓');
+    else if (e.key === 'Backspace') tastoPin('✕');
   }
+});
+function esci() {
+  try { sessionStorage.removeItem('presenze_admin'); } catch (e) {}
+  location.reload();
 }
 
-// ══ STATO OGGI (dipendente) ══
-async function caricaStatoOggi(nome) {
-  const docId = nome + '_' + oggi();
-  const el = document.getElementById('status-timbrature');
-  try {
-    const doc = await db.collection('presenze').doc(docId).get();
-    if (!doc.exists || !doc.data().timbrature?.length) {
-      el.innerHTML = '<div class="empty"><div class="empty-ico">🕐</div>Nessuna timbratura oggi</div>';
-      return;
-    }
-    const timb = doc.data().timbrature;
-    const icone = {entrata:'🟢',uscita:'🔴',ferie:'🏖️',malattia:'🤒'};
-    const colori = {entrata:'var(--success)',uscita:'var(--danger)',ferie:'var(--gold)',malattia:'#ff9999'};
-    el.innerHTML = timb.map(t =>
-      '<div class="status-row"><span class="status-tipo" style="color:' + (colori[t.tipo]||'#fff') + '">' + (icone[t.tipo]||'•') + ' ' + t.tipo.charAt(0).toUpperCase()+t.tipo.slice(1) + '</span><span class="status-ora">' + t.ora + '</span></div>'
-    ).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--danger);font-size:0.8rem">Errore caricamento</div>';
+// ══ AVVIO ══
+let giornataOggi = giornataDi(Date.now());
+let annullaOggi = null, annullaReport = null;
+let datiOggi = [], datiReport = [], meseDemoCaricato = null;
+let ultimoReport = null;
+
+function entra() {
+  document.getElementById('v-pin').hidden = true;
+  document.getElementById('v-admin').hidden = false;
+  document.getElementById('badge-modo').innerHTML = MODALITA_DEMO
+    ? '<span class="badge badge-prova">🧪 DEMO — dati inventati, nulla viene salvato</span>'
+    : COLLEZIONE.includes('prova') ? '<span class="badge badge-prova">🧪 Archivio di prova</span>' : '';
+
+  document.getElementById('sel-dip').innerHTML = Object.entries(DIPENDENTI)
+    .map(([id, d]) => '<option value="' + id + '">' + d.nome + '</option>').join('');
+  const ora = new Date();
+  let opzioni = '';
+  for (let i = 0; i < 13; i++) {
+    const d = new Date(ora.getFullYear(), ora.getMonth() - i, 1);
+    const val = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    opzioni += '<option value="' + val + '">' + nomeMese(val) + '</option>';
   }
+  document.getElementById('sel-mese').innerHTML = opzioni;
+
+  const base = location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+  document.getElementById('link-lista').innerHTML = Object.values(DIPENDENTI).map(d =>
+    '<div class="stato-dip"><div><div style="font-weight:600">' + d.nome + '</div><div class="piccolo muted" style="word-break:break-all">' + base + d.pagina + '</div></div>' +
+    '<button class="btn btn-t btn-sm" onclick="copia(\'' + base + d.pagina + '\')">Copia</button></div>'
+  ).join('');
+
+  ascoltaOggi();
+  setInterval(() => {
+    const g = giornataDi(Date.now());
+    if (g !== giornataOggi) { giornataOggi = g; ascoltaOggi(); }
+    else renderOggi();
+  }, 30000);
 }
 
-// ══ PRESENZE OGGI (admin) ══
-async function caricaOggi() {
-  const el = document.getElementById('oggi-lista');
-  const dataEl = document.getElementById('oggi-data');
-  dataEl.textContent = fmtData(oggi());
-  el.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div>Caricamento...</div>';
-  try {
-    const snap = await db.collection('presenze').where('data','==',oggi()).get();
-    const mappa = {};
-    snap.forEach(d => { mappa[d.data().nome] = d.data(); });
-
-    el.innerHTML = DIPENDENTI.map(dip => {
-      const dati = mappa[dip.nome];
-      const timb = dati?.timbrature || [];
-      const ultima = timb.length ? timb[timb.length-1] : null;
-      const icone = {entrata:'🟢',uscita:'🔴',ferie:'🏖️',malattia:'🤒'};
-      const cls = ultima ? 'stato-'+ultima.tipo : 'stato-assente';
-      const testo = ultima
-        ? (icone[ultima.tipo]||'') + ' ' + ultima.tipo.charAt(0).toUpperCase()+ultima.tipo.slice(1) + ' ' + ultima.ora
-        : '— Non presente';
-
-      // Calcola ore se c'è entrata e uscita
-      let oreExtra = '';
-      const entrata = timb.find(t => t.tipo==='entrata');
-      const uscita = timb.find(t => t.tipo==='uscita');
-      if (entrata && uscita) {
-        const [he,me] = entrata.ora.split(':').map(Number);
-        const [hu,mu] = uscita.ora.split(':').map(Number);
-        const ore = ((hu*60+mu)-(he*60+me))/60;
-        oreExtra = '<div style="font-size:0.65rem;color:var(--teal-l);margin-top:2px">⏱ ' + ore.toFixed(1) + 'h lavorate</div>';
-      }
-
-      return '<div class="dip-row"><div><div class="dip-nome">' + dip.ico + ' ' + dip.nome + '</div><div class="dip-rep">' + dip.reparto + '</div>' + oreExtra + '</div><div class="dip-stato ' + cls + '">' + testo + '</div></div>';
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--danger);font-size:0.82rem;padding:12px">Errore: ' + e.message + '</div>';
-  }
+function apriTab(nome) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === nome));
+  ['oggi', 'report', 'link'].forEach(n => document.getElementById('tab-' + n).hidden = n !== nome);
+  if (nome === 'report') caricaReport();
 }
 
-// ══ PIN ADMIN ══
-function pinTasto(c) {
-  if (pinCorrente.length >= 4) return;
-  pinCorrente += c;
-  document.getElementById('pin-display').textContent = '●'.repeat(pinCorrente.length) + '—'.repeat(4-pinCorrente.length);
+// ══ OGGI ══
+function ascoltaOggi() {
+  document.getElementById('oggi-titolo').textContent = fmtDataLunga(giornataOggi);
+  if (annullaOggi) annullaOggi();
+  if (MODALITA_DEMO) { datiOggi = datiDemo(giornataOggi.slice(0, 7)); renderOggi(); return; }
+  annullaOggi = db.collection(COLLEZIONE).where('giornata', '==', giornataOggi)
+    .onSnapshot(snap => { datiOggi = snap.docs.map(normalizza); renderOggi(); },
+      err => { document.getElementById('oggi-lista').innerHTML = '<div class="vuoto" style="color:var(--danger)">Errore: ' + esc(err.message) + '</div>'; });
 }
-function pinCanc() {
-  pinCorrente = '';
-  document.getElementById('pin-display').textContent = '——';
-}
-function pinOk() {
-  if (pinCorrente === PIN_ADMIN) {
-    document.getElementById('sc-report-pin').style.display = 'none';
-    document.getElementById('sc-report-body').style.display = 'block';
-    pinCorrente = '';
-    document.getElementById('pin-display').textContent = '——';
-    popolaMesi();
-    caricaReport();
-  } else {
-    mostraToast('❌ PIN errato');
-    pinCanc();
-  }
+
+function renderOggi() {
+  const adesso = Date.now();
+  document.getElementById('oggi-lista').innerHTML = Object.entries(DIPENDENTI).map(([id, d]) => {
+    const r = calcolaGiornata(id, giornataOggi, datiOggi, adesso);
+    const fasce = fascePreviste(id, giornataOggi);
+    const ultimo = r.turni[r.turni.length - 1];
+    let stato;
+    if (r.ferie) stato = '<span class="pos">🏖️ Ferie</span>';
+    else if (r.malattia) stato = '<span class="neg">🤒 Malattia</span>';
+    else if (r.inServizio) stato = '<span class="ok">🟢 In servizio dalle ' + oraDi(ultimo.da) + '</span>';
+    else if (ultimo) stato = '<span class="muted">🔴 Uscito alle ' + oraDi(ultimo.a) + '</span>';
+    else stato = '<span class="muted">' + (fasce.length ? '— Non ancora timbrato' : '💤 Riposo') + '</span>';
+    return '<div class="stato-dip"><div><div style="font-weight:600">' + d.nome + '</div>' +
+      '<div class="piccolo muted">Previsto: ' + testoFasce(fasce) + '</div>' +
+      (r.turni.length ? '<div class="piccolo" style="color:var(--teal-l);margin-top:2px">⏱ ' + fmtDurata(r.lavorati) + ' lavorate · ' + testoTurni(r) + '</div>' : '') +
+      (r.anomalie.length ? '<div class="nota-anom">⚠️ ' + r.anomalie.join(' · ') + '</div>' : '') +
+      '</div><div style="text-align:right;font-weight:600;font-size:0.85rem">' + stato + '</div></div>';
+  }).join('');
 }
 
 // ══ REPORT ══
-function popolaMesi() {
-  const sel = document.getElementById('mese-sel');
-  sel.innerHTML = '';
-  const ora = new Date();
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(ora.getFullYear(), ora.getMonth()-i, 1);
-    const val = d.toISOString().slice(0,7);
-    const label = d.toLocaleDateString('it-IT',{month:'long',year:'numeric'});
-    sel.innerHTML += '<option value="' + val + '">' + label.charAt(0).toUpperCase()+label.slice(1) + '</option>';
+function caricaReport() {
+  const mese = document.getElementById('sel-mese').value;
+  if (annullaReport) { annullaReport(); annullaReport = null; }
+  if (MODALITA_DEMO) {
+    if (meseDemoCaricato !== mese) { datiReport = datiDemo(mese); meseDemoCaricato = mese; }
+    renderReport();
+    return;
   }
+  document.getElementById('rep-tabella').innerHTML = '<tr><td class="vuoto">Caricamento…</td></tr>';
+  // Un giorno di margine ai bordi: la giornata viene poi ricalcolata sull'ora del server
+  annullaReport = db.collection(COLLEZIONE)
+    .where('giornata', '>=', aggiungiGiorni(mese + '-01', -1))
+    .where('giornata', '<=', mese + '-32')
+    .onSnapshot(snap => { datiReport = snap.docs.map(normalizza); renderReport(); },
+      err => { document.getElementById('rep-tabella').innerHTML = '<tr><td style="color:var(--danger)">Errore: ' + esc(err.message) + '</td></tr>'; });
 }
 
-async function caricaReport() {
-  const mese = document.getElementById('mese-sel').value;
-  const el = document.getElementById('report-contenuto');
-  el.innerHTML = '<div class="empty"><div class="empty-ico">⏳</div>Caricamento...</div>';
+function testoTurni(r, sep) {
+  return r.turni.map(t => oraDi(t.da) + '–' + (t.a ? oraDi(t.a) : '…')).join(sep || ', ');
+}
+
+function noteGiorno(r) {
+  const n = [];
+  if (r.ferie) n.push('Ferie');
+  if (r.malattia) n.push('Malattia');
+  if (!r.previsti && r.lavorati) n.push('Lavorato nel giorno di riposo');
+  if (r.inCorso) n.push('Giornata in corso');
+  r.timbrature.filter(t => t.fonte === 'admin').forEach(t =>
+    n.push('Aggiunta a mano: ' + t.tipo + (t.tipo === 'entrata' || t.tipo === 'uscita' ? ' ' + oraDi(t.ts) : '') + (t.nota ? ' (' + t.nota + ')' : '')));
+  return n;
+}
+
+function renderReport() {
+  const dipId = document.getElementById('sel-dip').value;
+  const mese = document.getElementById('sel-mese').value;
+  const {giorni, tot} = calcolaMese(dipId, mese, datiReport, Date.now());
+  ultimoReport = {dipId, mese, giorni, tot};
+
+  document.getElementById('rep-kpi').innerHTML = [
+    ['Ore previste', fmtDurata(tot.previsti), ''],
+    ['Ore lavorate', fmtDurata(tot.lavorati), ''],
+    [etichettaExtra(dipId), '+' + fmtDurata(tot.extra), tot.extra ? 'pos' : ''],
+    ['Ore mancanti', '−' + fmtDurata(tot.mancanti), tot.mancanti ? 'neg' : ''],
+    ['Ferie / Malattia', tot.ferie + ' / ' + tot.malattia + ' gg', ''],
+    ['Giorni da controllare', tot.anomalie, tot.anomalie ? 'neg' : 'ok'],
+  ].map(([l, v, c]) => '<div class="kpi"><div class="kpi-v ' + c + '">' + v + '</div><div class="kpi-l">' + l + '</div></div>').join('');
+
+  const corpo = giorni.map(r => {
+    const dt = dataDaIso(r.giornata);
+    const cls = [r.previsti ? '' : 'riposo', r.futura ? 'futura' : '', r.anomalie.length ? 'anomalia' : ''].join(' ');
+    const vuota = r.futura || r.inCorso || (!r.previsti && !r.lavorati);
+    const diffCella = vuota ? '' :
+      '<span class="' + (r.differenza > 0 ? 'pos' : r.differenza < 0 ? 'neg' : 'ok') + '">' + fmtDurata(r.differenza, true) + '</span>';
+    const note = noteGiorno(r).map(esc).concat(r.anomalie.map(a => '<span class="nota-anom">⚠️ ' + esc(a) + '</span>'));
+    return '<tr class="' + cls + '">' +
+      '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b></td>' +
+      '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata)) + '</td>' +
+      '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : '')) + '</td>' +
+      '<td class="num">' + (r.previsti ? fmtDurata(r.previsti) : '') + '</td>' +
+      '<td class="num">' + (r.lavorati ? fmtDurata(r.lavorati) : '') + '</td>' +
+      '<td class="num">' + diffCella + '</td>' +
+      '<td class="piccolo">' + note.join('<br>') + '</td>' +
+      '<td>' + (r.futura ? '' : '<button class="btn btn-o btn-sm" title="Correggi" onclick="apriCorrezione(\'' + r.giornata + '\')">✎</button>') + '</td></tr>';
+  }).join('');
+
+  document.getElementById('rep-tabella').innerHTML =
+    '<thead><tr><th>Giorno</th><th>Orario previsto</th><th>Timbrature</th><th class="num">Previste</th><th class="num">Lavorate</th><th class="num">Differenza</th><th>Note</th><th></th></tr></thead>' +
+    '<tbody>' + corpo + '</tbody>' +
+    '<tfoot><tr><td colspan="3">Totale mese</td><td class="num">' + fmtDurata(tot.previsti) + '</td><td class="num">' + fmtDurata(tot.lavorati) + '</td>' +
+    '<td class="num"><span class="pos">+' + fmtDurata(tot.extra) + '</span><br><span class="neg">−' + fmtDurata(tot.mancanti) + '</span></td><td colspan="2"></td></tr></tfoot>';
+
+  document.getElementById('rep-note').innerHTML =
+    'Ore in h:mm, al minuto, senza arrotondamenti. Differenza = lavorate − previste, giornata per giornata. ' +
+    'Le timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 contano sulla giornata precedente. ' +
+    'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti.';
+
+  if (document.getElementById('modale').dataset.giornata) apriCorrezione(document.getElementById('modale').dataset.giornata);
+}
+
+// ══ CORREZIONI ══
+const NOMI_TIPO = {entrata: '🟢 Entrata', uscita: '🔴 Uscita', ferie: '🏖️ Ferie', malattia: '🤒 Malattia'};
+
+function apriCorrezione(giornata) {
+  const dipId = document.getElementById('sel-dip').value;
+  const t = datiReport.filter(x => x.dip === dipId && x.giornata === giornata).sort((a, b) => a.ts - b.ts);
+  const modale = document.getElementById('modale');
+  const bozza = modale.dataset.giornata === giornata && document.getElementById('c-tipo')
+    ? {tipo: document.getElementById('c-tipo').value, ora: document.getElementById('c-ora').value, nota: document.getElementById('c-nota').value}
+    : {tipo: 'entrata', ora: '', nota: ''};
+  modale.dataset.giornata = giornata;
+  modale.innerHTML =
+    '<div class="modale-bg" onclick="if(event.target===this)chiudiModale()"><div class="modale">' +
+    '<div class="card-t">' + DIPENDENTI[dipId].breve + ' — ' + fmtDataLunga(giornata) + '</div>' +
+    '<div class="piccolo muted" style="margin-bottom:10px">Previsto: ' + testoFasce(fascePreviste(dipId, giornata)) + '</div>' +
+    (t.length ? t.map(x =>
+      '<div class="riga ' + x.tipo + '"' + (x.annullata ? ' style="opacity:.45"' : '') + '>' +
+      '<span class="riga-t"' + (x.annullata ? ' style="text-decoration:line-through"' : '') + '>' + NOMI_TIPO[x.tipo] +
+      (x.fonte === 'admin' ? '<span class="tag tag-admin">a mano</span>' : '') +
+      (x.nota ? '<div class="piccolo muted" style="font-weight:400">' + esc(x.nota) + '</div>' : '') + '</span>' +
+      '<span class="riga-o">' + (x.tipo === 'entrata' || x.tipo === 'uscita' ? oraDi(x.ts) : '') + '</span>' +
+      (x.annullata ? '<span class="piccolo muted">annullata</span>' : '<button class="btn btn-o btn-sm" onclick="annullaTimbratura(\'' + x.id + '\')">Annulla</button>') +
+      '</div>').join('') : '<div class="vuoto">Nessuna timbratura</div>') +
+    '<div class="card-t" style="margin-top:16px;font-size:0.9rem">Aggiungi a mano</div>' +
+    '<div class="form-riga">' +
+    '<div><label for="c-tipo">Tipo</label><select id="c-tipo" onchange="aggiornaCampoOra()">' +
+    ['entrata', 'uscita', 'ferie', 'malattia'].map(v => '<option value="' + v + '"' + (v === bozza.tipo ? ' selected' : '') + '>' + NOMI_TIPO[v].slice(3) + '</option>').join('') + '</select></div>' +
+    '<div id="c-ora-box"><label for="c-ora">Ora</label><input type="time" id="c-ora" value="' + bozza.ora + '"></div></div>' +
+    '<label for="c-nota">Motivo (resta nel registro)</label><input id="c-nota" placeholder="es. dimenticata uscita" value="' + esc(bozza.nota) + '">' +
+    '<div style="display:flex;gap:8px;margin-top:14px">' +
+    '<button class="btn btn-g" style="flex:1" onclick="aggiungiTimbratura(\'' + dipId + '\',\'' + giornata + '\')">Aggiungi</button>' +
+    '<button class="btn btn-o" onclick="chiudiModale()">Chiudi</button></div>' +
+    '<div class="piccolo muted" style="margin-top:10px">Un orario prima delle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 viene messo sulla notte dopo questa giornata. Annullare non cancella: la timbratura resta visibile barrata.</div>' +
+    '</div></div>';
+  aggiornaCampoOra();
+}
+function aggiornaCampoOra() {
+  const tipo = document.getElementById('c-tipo').value;
+  document.getElementById('c-ora-box').hidden = tipo === 'ferie' || tipo === 'malattia';
+}
+function chiudiModale() {
+  const m = document.getElementById('modale');
+  m.innerHTML = '';
+  delete m.dataset.giornata;
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c])); }
+
+async function aggiungiTimbratura(dipId, giornata) {
+  const tipo = document.getElementById('c-tipo').value;
+  const ora = document.getElementById('c-ora').value;
+  const nota = document.getElementById('c-nota').value.trim();
+  const conOra = tipo === 'entrata' || tipo === 'uscita';
+  if (conOra && !ora) { mostraToast('Inserisci l\'ora', true); return; }
+  const ts = tsDaGiornataOra(giornata, conOra ? ora : '12:00');
+  const doc = {dip: dipId, tipo, giornata, tsClient: ts, fonte: 'admin', nota};
   try {
-    const inizio = mese + '-01';
-    const fine = mese + '-31';
-    const snap = await db.collection('presenze')
-      .where('data','>=',inizio)
-      .where('data','<=',fine)
-      .get();
-
-    // Raggruppa per dipendente
-    const datiDip = {};
-    DIPENDENTI.forEach(d => { datiDip[d.nome] = {giorni:[], ferie:0, malattia:0, giorniLav:0, oreTotal:0}; });
-    snap.forEach(doc => {
-      const d = doc.data();
-      if (!datiDip[d.nome]) return;
-      const timb = d.timbrature || [];
-      const haFerie = timb.some(t => t.tipo==='ferie');
-      const haMalattia = timb.some(t => t.tipo==='malattia');
-      const entrata = timb.find(t => t.tipo==='entrata');
-      const uscita = timb.find(t => t.tipo==='uscita');
-      if (haFerie) datiDip[d.nome].ferie++;
-      else if (haMalattia) datiDip[d.nome].malattia++;
-      else if (entrata) {
-        datiDip[d.nome].giorniLav++;
-        if (uscita) {
-          const [he,me] = entrata.ora.split(':').map(Number);
-          const [hu,mu] = uscita.ora.split(':').map(Number);
-          datiDip[d.nome].oreTotal += ((hu*60+mu)-(he*60+me))/60;
-        }
-      }
-      datiDip[d.nome].giorni.push(d.data);
-    });
-
-    // Renderizza
-    const nomeMese = new Date(mese+'-15').toLocaleDateString('it-IT',{month:'long',year:'numeric'});
-    el.innerHTML = '<div style="font-weight:700;color:var(--gold);margin-bottom:14px;text-align:center">' + nomeMese.charAt(0).toUpperCase()+nomeMese.slice(1) + '</div>' +
-      DIPENDENTI.map(dip => {
-        const r = datiDip[dip.nome];
-        return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">' +
-          '<div style="font-weight:700;color:#fff;margin-bottom:10px">' + dip.ico + ' ' + dip.nome + ' <span style="font-size:0.68rem;color:var(--muted);font-weight:400">(' + dip.reparto + ')</span></div>' +
-          '<table class="rep-table"><thead><tr><th>Giorni lav.</th><th>Ore tot.</th><th>Ferie</th><th>Malattia</th></tr></thead>' +
-          '<tbody><tr>' +
-          '<td style="color:var(--success);font-weight:700">' + r.giorniLav + '</td>' +
-          '<td style="color:var(--teal-l);font-weight:700">' + r.oreTotal.toFixed(1) + 'h</td>' +
-          '<td style="color:var(--gold);font-weight:700">' + r.ferie + '</td>' +
-          '<td style="color:var(--danger);font-weight:700">' + r.malattia + '</td>' +
-          '</tr></tbody></table></div>';
-      }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--danger);font-size:0.82rem">Errore: ' + e.message + '</div>';
-  }
+    document.getElementById('c-ora').value = '';
+    document.getElementById('c-nota').value = '';
+    if (MODALITA_DEMO) {
+      datiReport.push(Object.assign({id: 'demo' + Date.now(), ts, tsServer: null, orologioDiverso: false, annullata: false, inAttesa: false}, doc));
+      renderReport();
+    } else {
+      doc.ts = firebase.firestore.Timestamp.fromMillis(ts);
+      doc.inseritaIl = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection(COLLEZIONE).add(doc);
+    }
+    mostraToast('Timbratura aggiunta');
+  } catch (e) { mostraToast('Errore: ' + e.message, true); }
 }
 
-// ══ SCARICA PDF ══
-function scaricaPDF() {
-  const mese = document.getElementById('mese-sel').value;
-  const contenuto = document.getElementById('report-contenuto').innerText;
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(16);
-  doc.text("L'Ancora — Report Presenze", 20, 20);
-  doc.setFontSize(12);
-  doc.setFont('helvetica','normal');
-  const nomeMese = new Date(mese+'-15').toLocaleDateString('it-IT',{month:'long',year:'numeric'});
-  doc.text('Mese: ' + nomeMese, 20, 32);
-  doc.setFontSize(10);
-  const righe = doc.splitTextToSize(contenuto, 170);
-  doc.text(righe, 20, 45);
-  doc.save('presenze_' + mese + '.pdf');
+async function annullaTimbratura(id) {
+  if (!confirm('Annullare questa timbratura? Resterà visibile barrata.')) return;
+  const x = datiReport.find(d => d.id === id);
+  try {
+    if (MODALITA_DEMO) { x.annullata = true; renderReport(); }
+    else await db.collection(COLLEZIONE).doc(id).update({annullata: true, annullataIl: firebase.firestore.FieldValue.serverTimestamp()});
+    mostraToast('Timbratura annullata');
+  } catch (e) { mostraToast('Errore: ' + e.message, true); }
 }
 
-// ══ TOAST ══
-function mostraToast(msg) {
+// ══ EXPORT ══
+function nomeMese(mese) {
+  const s = dataDaIso(mese + '-01').toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function righeExport() {
+  const {dipId, mese, giorni, tot} = ultimoReport;
+  const righe = giorni.filter(r => !r.futura).map(r => {
+    const dt = dataDaIso(r.giornata);
+    return [
+      GIORNI_BREVI[dt.getDay()] + ' ' + pad(dt.getDate()) + '/' + mese.slice(5, 7),
+      testoFasce(fascePreviste(dipId, r.giornata)).replace(/–/g, '-'),
+      testoTurni(r).replace(/–/g, '-').replace('…', '...') || (r.ferie ? 'Ferie' : r.malattia ? 'Malattia' : ''),
+      r.previsti ? fmtDurata(r.previsti) : '',
+      r.lavorati ? fmtDurata(r.lavorati) : '',
+      (r.inCorso || (!r.previsti && !r.lavorati)) ? '' : fmtDurata(r.differenza, true).replace('−', '-'),
+      noteGiorno(r).concat(r.anomalie.map(a => 'DA CONTROLLARE: ' + a)).join('; ')
+    ];
+  });
+  return {dipId, mese, tot, righe};
+}
+function sottotitolo() {
+  return MODALITA_DEMO ? ' - DATI DEMO' : COLLEZIONE.includes('prova') ? ' - ARCHIVIO DI PROVA' : '';
+}
+
+function esportaPDF() {
+  if (!ultimoReport) return;
+  const {dipId, mese, tot, righe} = righeExport();
+  const d = DIPENDENTI[dipId];
+  const pdf = new window.jspdf.jsPDF({orientation: 'landscape', unit: 'mm', format: 'a4'});
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
+  pdf.text("Ristorante L'Ancora - Registro presenze" + sottotitolo(), 14, 15);
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
+  pdf.text(d.nome + '  |  ' + d.reparto + '  |  Contratto ' + d.oreSett + ' h/settimana  |  ' + nomeMese(mese), 14, 22);
+  pdf.text('Previste ' + fmtDurata(tot.previsti) + '    Lavorate ' + fmtDurata(tot.lavorati) + '    ' + etichettaExtra(dipId) + ' +' + fmtDurata(tot.extra) +
+    '    Mancanti -' + fmtDurata(tot.mancanti) + '    Ferie ' + tot.ferie + ' gg    Malattia ' + tot.malattia + ' gg', 14, 28);
+  pdf.autoTable({
+    startY: 33,
+    head: [['Giorno', 'Orario previsto', 'Timbrature', 'Previste', 'Lavorate', 'Differenza', 'Note']],
+    body: righe,
+    foot: [['Totale', '', '', fmtDurata(tot.previsti), fmtDurata(tot.lavorati), '+' + fmtDurata(tot.extra) + ' / -' + fmtDurata(tot.mancanti), '']],
+    margin: {left: 14, right: 14, bottom: 12},
+    styles: {fontSize: 7, cellPadding: 0.8, overflow: 'linebreak'},
+    headStyles: {fillColor: [14, 124, 123]},
+    footStyles: {fillColor: [230, 230, 230], textColor: 20},
+    columnStyles: {0: {cellWidth: 18}, 1: {cellWidth: 46}, 2: {cellWidth: 46}, 3: {cellWidth: 17, halign: 'right'},
+      4: {cellWidth: 17, halign: 'right'}, 5: {cellWidth: 24, halign: 'right'}, 6: {cellWidth: 'auto'}},
+  });
+  pdf.setFontSize(8);
+  pdf.text('Ore in h:mm al minuto. Timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 attribuite alla giornata precedente. Generato il ' +
+    new Date().toLocaleString('it-IT'), 14, pdf.lastAutoTable.finalY + 6);
+  pdf.save('Presenze_' + d.breve + '_' + mese + '.pdf');
+}
+
+function esportaExcel() {
+  if (!ultimoReport) return;
+  const {dipId, mese, tot, righe} = righeExport();
+  const d = DIPENDENTI[dipId];
+  const aoa = [
+    ["Ristorante L'Ancora - Registro presenze" + sottotitolo()],
+    [d.nome, d.reparto, 'Contratto ' + d.oreSett + ' h/sett.', nomeMese(mese)],
+    [],
+    ['Giorno', 'Orario previsto', 'Timbrature', 'Previste (h:mm)', 'Lavorate (h:mm)', 'Differenza (h:mm)', 'Note'],
+    ...righe,
+    [],
+    ['Totale ore previste', '', '', fmtDurata(tot.previsti)],
+    ['Totale ore lavorate', '', '', '', fmtDurata(tot.lavorati)],
+    [etichettaExtra(dipId), '', '', '', '', '+' + fmtDurata(tot.extra)],
+    ['Ore mancanti', '', '', '', '', '-' + fmtDurata(tot.mancanti)],
+    ['Giorni ferie', tot.ferie], ['Giorni malattia', tot.malattia],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch: 11}, {wch: 26}, {wch: 26}, {wch: 15}, {wch: 15}, {wch: 17}, {wch: 60}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, nomeMese(mese).slice(0, 31));
+  XLSX.writeFile(wb, 'Presenze_' + d.breve + '_' + mese + '.xlsx');
+}
+
+// ══ UTILS ══
+function copia(testo) {
+  navigator.clipboard.writeText(testo).then(() => mostraToast('Link copiato'), () => prompt('Copia il link:', testo));
+}
+let timerToast;
+function mostraToast(msg, errore) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  el.classList.toggle('errore', !!errore);
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
+  clearTimeout(timerToast);
+  timerToast = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-// ══ INIT ══
-document.getElementById('data-oggi').textContent = fmtData(oggi());
+try { if (sessionStorage.getItem('presenze_admin') === '1') entra(); } catch (e) {}
 </script>
-
 </body>
 </html>
