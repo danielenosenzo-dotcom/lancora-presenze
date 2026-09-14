@@ -21,7 +21,6 @@ document.getElementById('app').innerHTML = `
   ${(MODALITA_DEMO || COLLEZIONE.includes('prova')) ? '<div class="centro" style="margin-bottom:14px"><span class="badge badge-prova">🧪 Versione di prova' + (MODALITA_DEMO ? ' — niente viene salvato' : '') + '</span></div>' : ''}
 
   <div class="card">
-    <div class="piccolo muted" id="t-previsto" style="margin-bottom:12px;text-align:center"></div>
     <div class="azioni">
       <button class="az az-entrata" id="b-entrata" onclick="timbra('entrata')"><span class="ico">🟢</span>Entrata</button>
       <button class="az az-uscita" id="b-uscita" onclick="timbra('uscita')"><span class="ico">🔴</span>Uscita</button>
@@ -30,12 +29,6 @@ document.getElementById('app').innerHTML = `
       <button class="az az-sec" onclick="timbra('ferie')"><span class="ico">🏖️</span>Ferie oggi</button>
       <button class="az az-sec" onclick="timbra('malattia')"><span class="ico">🤒</span>Malattia oggi</button>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="card-t">Le tue timbrature di oggi</div>
-    <div id="t-lista"><div class="vuoto">Caricamento…</div></div>
-    <div class="riepilogo" id="t-riepilogo"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>`;
@@ -52,7 +45,6 @@ function tick() {
 // ══ ASCOLTO IN TEMPO REALE ══
 function ascolta() {
   document.getElementById('t-data').textContent = 'Giornata di ' + fmtDataLunga(giornataCorrente).toLowerCase();
-  document.getElementById('t-previsto').textContent = 'Orario previsto oggi: ' + testoFasce(fascePreviste(DIP_ID, giornataCorrente));
   if (annullaAscolto) annullaAscolto();
   if (MODALITA_DEMO) { timbratureOggi = memoriaDemo; render(); return; }
   annullaAscolto = db.collection(COLLEZIONE)
@@ -61,9 +53,7 @@ function ascolta() {
     .onSnapshot({includeMetadataChanges: true}, snap => {
       timbratureOggi = snap.docs.map(normalizza).filter(x => !x.annullata);
       render();
-    }, err => {
-      document.getElementById('t-lista').innerHTML = '<div class="vuoto" style="color:var(--danger)">Errore di collegamento: ' + err.message + '</div>';
-    });
+    }, err => mostraToast('❌ Errore di collegamento: ' + err.message, true));
 }
 
 function ultimaTimbratura() {
@@ -72,25 +62,10 @@ function ultimaTimbratura() {
 }
 
 // ══ RENDER ══
-const ICONE = {entrata: '🟢', uscita: '🔴', ferie: '🏖️', malattia: '🤒'};
+// Il dipendente non vede le sue timbrature (solo l'admin): qui si evidenzia solo il tasto da premere
 const NOMI = {entrata: 'Entrata', uscita: 'Uscita', ferie: 'Ferie', malattia: 'Malattia'};
 
 function render() {
-  const lista = document.getElementById('t-lista');
-  const ordinate = [...timbratureOggi].sort((a, b) => a.ts - b.ts);
-  lista.innerHTML = ordinate.length ? ordinate.map(x =>
-    '<div class="riga ' + x.tipo + '"><span class="riga-t">' + ICONE[x.tipo] + ' ' + NOMI[x.tipo] +
-    (x.inAttesa ? ' <span class="piccolo muted">· in invio…</span>' : '') + '</span>' +
-    '<span class="riga-o">' + (x.tipo === 'ferie' || x.tipo === 'malattia' ? '' : oraDi(x.ts)) + '</span></div>'
-  ).join('') : '<div class="vuoto">🕐 Nessuna timbratura ancora</div>';
-
-  const r = calcolaGiornata(DIP_ID, giornataCorrente, timbratureOggi, Date.now());
-  const diff = r.inServizio ? r.lavorati - r.previsti : r.differenza;
-  document.getElementById('t-riepilogo').innerHTML =
-    '<div class="kpi"><div class="kpi-v">' + fmtDurata(r.lavorati) + '</div><div class="kpi-l">Lavorate</div></div>' +
-    '<div class="kpi"><div class="kpi-v">' + fmtDurata(r.previsti) + '</div><div class="kpi-l">Previste</div></div>' +
-    '<div class="kpi"><div class="kpi-v ' + (diff > 0 ? 'pos' : diff < 0 ? 'neg' : 'ok') + '">' + fmtDurata(diff, true) + '</div><div class="kpi-l">Differenza</div></div>';
-
   const ultima = ultimaTimbratura();
   const inServizio = ultima && ultima.tipo === 'entrata';
   document.getElementById('b-entrata').classList.toggle('suggerita', !inServizio);
