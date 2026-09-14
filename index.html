@@ -195,7 +195,7 @@ function renderOggi() {
       // Ancora "in servizio" ben oltre la fine del turno: probabile uscita dimenticata
       if (r.inServizio && fasce.length && !fasce.some(f => adesso >= f.ini - 3600000 && adesso <= f.fin + OLTRE_TURNO_MIN * 60000)) {
         const finito = fasce.filter(f => f.fin < adesso).pop();
-        if (finito) avvisi.push('Risulta ancora in servizio ma il turno è finito alle ' + finito.b + ': uscita dimenticata?');
+        if (finito) avvisi.push('Turno finito alle ' + finito.b + ' ma uscita non timbrata: se non timbra, vale l\'orario da contratto');
       }
     }
     let stato;
@@ -232,8 +232,9 @@ function caricaReport() {
       err => { document.getElementById('rep-tabella').innerHTML = '<tr><td style="color:var(--danger)">Errore: ' + esc(err.message) + '</td></tr>'; });
 }
 
+// L'asterisco segna un orario messo da contratto perché la timbratura è stata dimenticata
 function testoTurni(r, sep) {
-  return r.turni.map(t => oraDi(t.da) + '–' + (t.a ? oraDi(t.a) : '…')).join(sep || ', ');
+  return r.turni.map(t => oraDi(t.da) + (t.autoDa ? '*' : '') + '–' + (t.a ? oraDi(t.a) + (t.autoA ? '*' : '') : '…')).join(sep || ', ');
 }
 
 function noteGiorno(r) {
@@ -244,6 +245,7 @@ function noteGiorno(r) {
   if (r.assenza) n.push('Assenza (ore mancanti confermate)');
   if (!r.previsti && r.lavorati) n.push('Lavorato nel giorno di riposo');
   if (r.inCorso) n.push('Giornata in corso');
+  n.push(...r.automatiche);
   r.timbrature.filter(t => t.fonte === 'dipendente' && t.approvata).forEach(t =>
     n.push('Ora dichiarata dal dipendente, approvata: ' + t.tipo + ' ' + oraDi(t.ts)));
   r.timbrature.filter(t => t.fonte === 'admin').forEach(t =>
@@ -263,6 +265,7 @@ function renderReport() {
     [etichettaExtra(dipId), '+' + fmtDurata(tot.extra), tot.extra ? 'pos' : ''],
     ['Ore mancanti', '−' + fmtDurata(tot.mancanti), tot.mancanti ? 'neg' : ''],
     ['Ferie / Malattia', tot.ferie + ' / ' + tot.malattia + ' gg', ''],
+    ['Timbrature dimenticate', tot.dimenticate, tot.dimenticate ? 'pos' : 'ok'],
     ['Giorni da sistemare', tot.anomalie, tot.anomalie ? 'neg' : 'ok'],
   ].map(([l, v, c]) => '<div class="kpi"><div class="kpi-v ' + c + '">' + v + '</div><div class="kpi-l">' + l + '</div></div>').join('');
 
@@ -296,7 +299,8 @@ function renderReport() {
     'Ore in h:mm, al minuto, senza arrotondamenti. Differenza = lavorate − previste, giornata per giornata. ' +
     'Le timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 contano sulla giornata precedente. ' +
     'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti. ' +
-    'I giorni con timbrature mancanti o ore dichiarate da approvare restano fuori dai totali finché non li sistemi.';
+    '<b>*</b> = timbratura dimenticata: vale l\'orario da contratto (correggibile con ✎). ' +
+    'Restano fuori dai totali, finché non li sistemi, solo i giorni senza nessuna timbratura o con timbrature fuori orario.';
 
   if (document.getElementById('modale').dataset.giornata) apriCorrezione(document.getElementById('modale').dataset.giornata);
 }
@@ -488,7 +492,7 @@ function esportaPDF() {
       4: {cellWidth: 17, halign: 'right'}, 5: {cellWidth: 24, halign: 'right'}, 6: {cellWidth: 'auto'}},
   });
   pdf.setFontSize(8);
-  pdf.text('Ore in h:mm al minuto. Timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 attribuite alla giornata precedente. Generato il ' +
+  pdf.text('Ore in h:mm al minuto. * = timbratura dimenticata, applicato orario da contratto. Timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 attribuite alla giornata precedente. Generato il ' +
     new Date().toLocaleString('it-IT'), 14, pdf.lastAutoTable.finalY + 6);
   pdf.save('Presenze_' + d.breve + '_' + mese + '.pdf');
 }
@@ -509,6 +513,8 @@ function esportaExcel() {
     [etichettaExtra(dipId), '', '', '', '', '+' + fmtDurata(tot.extra)],
     ['Ore mancanti', '', '', '', '', '-' + fmtDurata(tot.mancanti)],
     ['Giorni ferie', tot.ferie], ['Giorni malattia', tot.malattia],
+    ['Timbrature dimenticate (orario da contratto)', tot.dimenticate],
+    ['* = timbratura dimenticata, applicato orario da contratto'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{wch: 11}, {wch: 26}, {wch: 26}, {wch: 15}, {wch: 15}, {wch: 17}, {wch: 60}];
