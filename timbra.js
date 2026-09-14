@@ -31,6 +31,7 @@ document.getElementById('app').innerHTML = `
     </div>
   </div>
 </div>
+<div id="modale"></div>
 <div class="toast" id="toast"></div>`;
 
 // ══ OROLOGIO ══
@@ -73,15 +74,40 @@ function render() {
 }
 
 // ══ TIMBRA ══
+// Doppio tocco entro questo tempo = stessa timbratura, non se ne registra un'altra
+const DOPPIO_TOCCO_MIN = 10;
+
 function timbra(tipo) {
   const ultima = ultimaTimbratura();
-  if (tipo === 'entrata' && ultima && ultima.tipo === 'entrata' &&
-      !confirm('Risulti già entrato alle ' + oraDi(ultima.ts) + '. Registrare comunque una nuova entrata?')) return;
-  if (tipo === 'uscita' && !(ultima && ultima.tipo === 'entrata') &&
-      !confirm('Non risulta un\'entrata aperta. Registrare comunque l\'uscita?')) return;
-  if ((tipo === 'ferie' || tipo === 'malattia') &&
-      !confirm('Confermi ' + NOMI[tipo].toLowerCase() + ' per la giornata di oggi?')) return;
+  const adesso = Date.now();
+  const recente = ultima && ultima.tipo === tipo && adesso - ultima.ts < DOPPIO_TOCCO_MIN * 60000;
 
+  if (tipo === 'entrata' || tipo === 'uscita') {
+    if (recente) { mostraToast('👍 ' + NOMI[tipo] + ' già registrata alle ' + oraDi(ultima.ts)); return; }
+    const inServizio = ultima && ultima.tipo === 'entrata';
+    if (tipo === 'entrata' && inServizio) {
+      chiediOraDimenticata({
+        mancante: 'uscita', poi: 'entrata', dopo: ultima.ts,
+        titolo: 'Hai dimenticato di timbrare l\'uscita?',
+        testo: 'Risulti entrato alle <b>' + oraDi(ultima.ts) + '</b> e non hai timbrato l\'uscita. A che ora sei uscito?'
+      });
+      return;
+    }
+    if (tipo === 'uscita' && !inServizio) {
+      chiediOraDimenticata({
+        mancante: 'entrata', poi: 'uscita', dopo: ultima ? ultima.ts : null,
+        titolo: 'Non risulta la tua entrata',
+        testo: 'Non hai timbrato l\'entrata di questo turno. A che ora sei entrato?'
+      });
+      return;
+    }
+  } else if (!confirm('Confermi ' + NOMI[tipo].toLowerCase() + ' per la giornata di oggi?')) return;
+
+  registra(tipo);
+}
+
+// Timbratura col tasto: vale l'ora del server
+function registra(tipo) {
   const adesso = Date.now();
   const dati = {dip: DIP_ID, tipo, giornata: giornataDi(adesso), tsClient: adesso, fonte: 'app'};
   const msg = {
@@ -90,21 +116,76 @@ function timbra(tipo) {
     ferie: '🏖️ Ferie registrate per oggi',
     malattia: '🤒 Malattia registrata per oggi'
   }[tipo];
-
   if (navigator.vibrate) navigator.vibrate(60);
+  salva(dati, adesso);
+  mostraToast(navigator.onLine || MODALITA_DEMO ? msg : msg + ' (senza rete: verrà inviata appena torna il segnale)');
+}
 
+function salva(dati, tsLocale) {
   if (MODALITA_DEMO) {
-    memoriaDemo.push(Object.assign({id: 'demo' + adesso, ts: adesso, tsServer: adesso, nota: '', orologioDiverso: false, inAttesa: false}, dati));
+    memoriaDemo.push(Object.assign({id: 'demo' + Math.random(), ts: tsLocale, tsServer: tsLocale, nota: '', orologioDiverso: false, inAttesa: false}, dati));
     timbratureOggi = memoriaDemo;
     render();
-    mostraToast(msg);
     return;
   }
-
   dati.ts = firebase.firestore.FieldValue.serverTimestamp();
   // Non si attende la conferma del server: con rete assente la timbratura resta in coda e parte appena torna il segnale
   db.collection(COLLEZIONE).add(dati).catch(e => mostraToast('❌ Timbratura NON salvata: ' + e.message, true));
-  mostraToast(navigator.onLine ? msg : msg + ' (senza rete: verrà inviata appena torna il segnale)');
+}
+
+// ══ TIMBRATURA DIMENTICATA ══
+// Il dipendente dichiara l'ora: viene salvata come "dichiarata" e l'admin la deve approvare
+let richiesta = null;
+
+function chiediOraDimenticata(opz) {
+  richiesta = opz;
+  const adesso = Date.now();
+  // Proposta: fine (o inizio) della fascia prevista più vicina, se plausibile
+  const fasce = fasceConOrari(DIP_ID, giornataCorrente);
+  let proposta = '';
+  if (opz.mancante === 'uscita') {
+    const f = fasciaPiuVicina(fasce, opz.dopo, 'ini');
+    if (f && f.fin > opz.dopo && f.fin < adesso) proposta = f.b;
+  } else {
+    const f = fasciaPiuVicina(fasce, adesso, 'fin');
+    if (f && f.ini < adesso && (!opz.dopo || f.ini > opz.dopo)) proposta = f.a;
+  }
+  document.getElementById('modale').innerHTML =
+    '<div class="modale-bg"><div class="modale">' +
+    '<div class="card-t">⚠️ ' + opz.titolo + '</div>' +
+    '<div style="font-size:0.92rem;line-height:1.45;margin-bottom:6px">' + opz.testo + '</div>' +
+    '<label for="d-ora">Ora</label><input type="time" id="d-ora" value="' + proposta + '" style="font-size:1.3rem;text-align:center">' +
+    '<div class="piccolo muted" style="margin-top:8px">L\'ora che scrivi viene segnalata al titolare, che la controlla.</div>' +
+    '<button class="btn btn-g btn-blocco" style="margin-top:16px;padding:15px" onclick="confermaOraDimenticata()">Conferma e timbra ' + NOMI[opz.poi] + '</button>' +
+    '<button class="btn btn-o btn-blocco" style="margin-top:8px" onclick="nonRicordo()">Non ricordo — timbra solo ' + NOMI[opz.poi] + '</button>' +
+    '<button class="btn btn-o btn-blocco" style="margin-top:8px;border:none" onclick="chiudiModale()">Annulla</button>' +
+    '</div></div>';
+}
+
+function confermaOraDimenticata() {
+  const ora = document.getElementById('d-ora').value;
+  if (!ora) { mostraToast('Scrivi l\'ora', true); return; }
+  const ts = tsDaGiornataOra(giornataCorrente, ora);
+  const adesso = Date.now();
+  if (ts >= adesso) { mostraToast('L\'ora deve essere prima di adesso', true); return; }
+  if (richiesta.dopo && ts <= richiesta.dopo) {
+    mostraToast('L\'ora deve essere dopo le ' + oraDi(richiesta.dopo), true); return;
+  }
+  salva({dip: DIP_ID, tipo: richiesta.mancante, giornata: giornataCorrente, tsClient: ts, fonte: 'dipendente', nota: 'Ora dichiarata dal dipendente'}, ts);
+  const poi = richiesta.poi;
+  chiudiModale();
+  registra(poi);
+}
+
+function nonRicordo() {
+  const poi = richiesta.poi;
+  chiudiModale();
+  registra(poi);
+}
+
+function chiudiModale() {
+  document.getElementById('modale').innerHTML = '';
+  richiesta = null;
 }
 
 // ══ TOAST ══

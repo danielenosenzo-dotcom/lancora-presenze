@@ -12,6 +12,7 @@ const ORA_CAMBIO_GIORNATA = 5;
 // Scarto oltre il quale l'ora del telefono è considerata diversa da quella del server
 const SCARTO_OROLOGIO_MIN = 5;
 
+// attivoDal: primo giorno di registro (prima non si segnalano giornate senza timbrature).
 // Orari fissi. Giorni: 0=domenica, 1=lunedì ... 6=sabato. Fasce che finiscono dopo mezzanotte: scrivere l'ora reale (es. '01:00').
 const DIPENDENTI = {
   alessio: {
@@ -23,7 +24,8 @@ const DIPENDENTI = {
       5: [['13:00','16:00'], ['20:00','01:00']],
       6: [['13:00','16:00'], ['20:00','01:00']],
     },
-    pagina: 'alessio-64ed0e48.html'
+    pagina: 'alessio-64ed0e48.html',
+    attivoDal: '2026-09-14'
   }
 };
 
@@ -94,82 +96,129 @@ function testoFasce(fasce) { return fasce.length ? fasce.map(f => f[0] + '–' +
 function etichettaExtra(dipId) { return DIPENDENTI[dipId].oreSett >= 40 ? 'Straordinario' : 'Supplementare'; }
 
 // ══ LETTURA DOCUMENTI ══
-// Ogni timbratura è un documento: {dip, tipo, giornata, ts (server), tsClient, fonte, nota, annullata}
-// Le correzioni dell'admin non cancellano: segnano annullata=true, così resta traccia di tutto
+// Ogni timbratura è un documento: {dip, tipo, giornata, ts, tsClient, fonte, nota, annullata, approvata}
+//   fonte 'app'        = timbrata col tasto: vale l'ora del server
+//   fonte 'dipendente' = ora dichiarata dal dipendente dopo una dimenticanza: da approvare
+//   fonte 'admin'      = aggiunta a mano dall'admin
+// Le correzioni non cancellano: segnano annullata=true, così resta traccia di tutto
+const TIPI_GIORNATA = ['ferie', 'malattia', 'assenza'];
+const NOMI_TIPO_TESTO = {entrata: 'Entrata', uscita: 'Uscita', ferie: 'Ferie', malattia: 'Malattia', assenza: 'Assenza'};
+
 function normalizza(doc) {
   const d = doc.data({serverTimestamps: 'estimate'});
   const tsServer = d.ts && d.ts.toMillis ? d.ts.toMillis() : null;
-  const ts = d.fonte === 'admin' ? d.tsClient : (tsServer || d.tsClient);
+  const oraScritta = d.fonte === 'admin' || d.fonte === 'dipendente';
+  const ts = oraScritta ? d.tsClient : (tsServer || d.tsClient);
   return {
-    id: doc.id, dip: d.dip, tipo: d.tipo, fonte: d.fonte || 'app', nota: d.nota || '', annullata: !!d.annullata,
+    id: doc.id, dip: d.dip, tipo: d.tipo, fonte: d.fonte || 'app', nota: d.nota || '',
+    annullata: !!d.annullata, approvata: !!d.approvata,
     ts, tsClient: d.tsClient, tsServer,
-    giornata: (d.tipo === 'ferie' || d.tipo === 'malattia') ? d.giornata : giornataDi(ts),
-    orologioDiverso: d.fonte !== 'admin' && tsServer && Math.abs(tsServer - d.tsClient) > SCARTO_OROLOGIO_MIN * 60000,
+    giornata: TIPI_GIORNATA.includes(d.tipo) || oraScritta ? d.giornata : giornataDi(ts),
+    orologioDiverso: !oraScritta && tsServer && Math.abs(tsServer - d.tsClient) > SCARTO_OROLOGIO_MIN * 60000,
     inAttesa: doc.metadata ? doc.metadata.hasPendingWrites : false
   };
 }
 
+// Fasce previste di una giornata con i timestamp reali di inizio e fine
+function fasceConOrari(dipId, giornata) {
+  return fascePreviste(dipId, giornata).map(([a, b]) => ({a, b, ini: tsDaGiornataOra(giornata, a), fin: tsDaGiornataOra(giornata, b)}));
+}
+function fasciaPiuVicina(fasce, ts, campo) {
+  return fasce.reduce((best, f) => (!best || Math.abs(f[campo] - ts) < Math.abs(best[campo] - ts)) ? f : best, null);
+}
+
 // ══ CALCOLO DI UNA GIORNATA ══
+// Regola di sicurezza: una timbratura dimenticata non deve MAI allungare il turno.
+// Due entrate di fila → il turno riparte dalla seconda; la prima resta "senza uscita" da sistemare.
 function calcolaGiornata(dipId, giornata, timbrature, adessoMs) {
+  const dip = DIPENDENTI[dipId];
   const t = timbrature.filter(x => !x.annullata && x.dip === dipId && x.giornata === giornata).sort((a, b) => a.ts - b.ts);
   const previsti = minutiPrevisti(dipId, giornata);
+  const fasce = fasceConOrari(dipId, giornata);
+  const oggiG = adessoMs ? giornataDi(adessoMs) : null;
   const r = {
-    giornata, previsti, lavorati: 0, differenza: 0, turni: [], anomalie: [],
-    ferie: t.some(x => x.tipo === 'ferie'), malattia: t.some(x => x.tipo === 'malattia'),
-    inServizio: false, timbrature: t
+    giornata, previsti, lavorati: 0, differenza: 0, turni: [], anomalie: [], suggerimenti: [],
+    ferie: t.some(x => x.tipo === 'ferie'), malattia: t.some(x => x.tipo === 'malattia'), assenza: t.some(x => x.tipo === 'assenza'),
+    inServizio: false, timbrature: t,
+    primaAvvio: !MODALITA_DEMO && !!dip.attivoDal && giornata < dip.attivoDal
   };
-  let aperta = null;
+  const suggerisci = (tipo, ora, motivo) => {
+    if (!r.suggerimenti.some(s => s.tipo === tipo && s.ora === ora)) r.suggerimenti.push({tipo, ora, motivo});
+  };
+  let aperta = null, ultimaChiusura = null;
   for (const x of t) {
     if (x.orologioDiverso) r.anomalie.push('Ora del telefono diversa (' + oraDi(x.tsClient) + ' sul telefono)');
+    if (x.fonte === 'dipendente' && !x.approvata) r.anomalie.push(NOMI_TIPO_TESTO[x.tipo] + ' ' + oraDi(x.ts) + ' dichiarata da ' + dip.breve + ': da approvare');
     if (x.tipo === 'entrata') {
-      if (aperta) { r.anomalie.push('Doppia entrata alle ' + oraDi(x.ts)); continue; }
+      if (aperta) {
+        r.anomalie.push('Entrata delle ' + oraDi(aperta.ts) + ' senza uscita');
+        const f = fasciaPiuVicina(fasce, aperta.ts, 'ini');
+        if (f && f.fin > aperta.ts && f.fin < x.ts) suggerisci('uscita', f.b, 'fine turno previsto');
+      }
       aperta = x;
     } else if (x.tipo === 'uscita') {
-      if (!aperta) { r.anomalie.push('Uscita alle ' + oraDi(x.ts) + ' senza entrata'); continue; }
+      if (!aperta) {
+        r.anomalie.push('Uscita delle ' + oraDi(x.ts) + ' senza entrata');
+        const f = fasciaPiuVicina(fasce, x.ts, 'fin');
+        if (f && f.ini < x.ts && (!ultimaChiusura || f.ini > ultimaChiusura)) suggerisci('entrata', f.a, 'inizio turno previsto');
+        ultimaChiusura = x.ts;
+        continue;
+      }
       const min = (x.ts - aperta.ts) / 60000;
       r.turni.push({da: aperta.ts, a: x.ts, min});
       r.lavorati += min;
       aperta = null;
+      ultimaChiusura = x.ts;
     }
   }
   if (aperta) {
-    const inCorso = adessoMs && giornataDi(adessoMs) === giornata;
-    if (inCorso) {
+    if (oggiG === giornata) {
       const min = (adessoMs - aperta.ts) / 60000;
       r.inServizio = true;
       r.turni.push({da: aperta.ts, a: null, min});
       r.lavorati += min;
+    } else {
+      r.anomalie.push('Entrata delle ' + oraDi(aperta.ts) + ' senza uscita');
+      const f = fasciaPiuVicina(fasce, aperta.ts, 'ini');
+      if (f && f.fin > aperta.ts) suggerisci('uscita', f.b, 'fine turno previsto');
     }
-    else r.anomalie.push('Manca l\'uscita dopo l\'entrata delle ' + oraDi(aperta.ts));
+  }
+  const haTimbrato = t.some(x => x.tipo === 'entrata' || x.tipo === 'uscita');
+  const giustificata = r.ferie || r.malattia || r.assenza;
+  if (oggiG && giornata < oggiG && previsti && !haTimbrato && !giustificata && !r.primaAvvio) {
+    r.anomalie.push('Nessuna timbratura in un giorno di lavoro');
+    suggerisci('orario-completo', '', 'orario previsto completo');
   }
   if (r.ferie || r.malattia) r.differenza = r.lavorati;  // assenza giustificata: le ore previste non mancano
-  else r.differenza = r.lavorati - previsti;
+  else r.differenza = r.lavorati - previsti;            // 'assenza' = ore mancanti confermate dall'admin
   r.lavorati = Math.round(r.lavorati);
   r.differenza = Math.round(r.differenza);
   return r;
 }
 
 // ══ CALCOLO DEL MESE ══
+// Nei totali entrano solo le giornate chiuse e senza errori: quelle da sistemare sono contate a parte
 function calcolaMese(dipId, mese, timbrature, adessoMs) {
   const [y, m] = mese.split('-').map(Number);
   const ultimo = new Date(y, m, 0).getDate();
   const giorni = [];
-  const tot = {previsti: 0, lavorati: 0, extra: 0, mancanti: 0, ferie: 0, malattia: 0, anomalie: 0};
+  const tot = {previsti: 0, lavorati: 0, extra: 0, mancanti: 0, ferie: 0, malattia: 0, assenze: 0, anomalie: 0};
   for (let g = 1; g <= ultimo; g++) {
     const iso = mese + '-' + pad(g);
     const r = calcolaGiornata(dipId, iso, timbrature, adessoMs);
-    // La giornata in corso e quelle future non entrano nei totali (il turno non è ancora finito)
     r.futura = !!adessoMs && iso > giornataDi(adessoMs);
     r.inCorso = !!adessoMs && iso === giornataDi(adessoMs);
+    r.daSistemare = !r.futura && !r.inCorso && !r.primaAvvio && r.anomalie.length > 0;
     giorni.push(r);
-    if (r.futura || r.inCorso) continue;
+    if (r.futura || r.inCorso || r.primaAvvio) continue;
+    if (r.daSistemare) { tot.anomalie++; continue; }
     tot.previsti += r.previsti;
     tot.lavorati += r.lavorati;
     if (r.differenza > 0) tot.extra += r.differenza;
     if (r.differenza < 0) tot.mancanti += -r.differenza;
     if (r.ferie) tot.ferie++;
     if (r.malattia) tot.malattia++;
-    if (r.anomalie.length) tot.anomalie++;
+    if (r.assenza) tot.assenze++;
   }
   return {giorni, tot};
 }
@@ -193,8 +242,11 @@ function datiDemo(mese) {
       fasce.forEach(([ini, fin], i) => {
         const e = tsDaGiornataOra(iso, ini) + (i === 0 ? 2 : -1) * 60000;
         const u = tsDaGiornataOra(iso, fin) + ritocchi[(g + i) % ritocchi.length] * 60000;
+        if (g === 25) return;                     // nessuna timbratura
         out.push({id: 'e' + n + i, dip: dipId, tipo: 'entrata', ts: e, tsClient: e, fonte: 'app'});
-        if (!(g === 20 && i === 1)) out.push({id: 'u' + n + i, dip: dipId, tipo: 'uscita', ts: u, tsClient: u, fonte: 'app'});
+        if (g === 20 && i === 1) return;          // dimentica l'uscita della sera
+        if (g === 22 && i === 0) return;          // dimentica l'uscita del pranzo
+        out.push({id: 'u' + n + i, dip: dipId, tipo: 'uscita', ts: u, tsClient: u, fonte: 'app'});
       });
     }
   }

@@ -173,22 +173,43 @@ function ascoltaOggi() {
       err => { document.getElementById('oggi-lista').innerHTML = '<div class="vuoto" style="color:var(--danger)">Errore: ' + esc(err.message) + '</div>'; });
 }
 
+// Avvisi in tempo reale: minuti di tolleranza
+const RITARDO_MIN = 15;
+const OLTRE_TURNO_MIN = 30;
+
 function renderOggi() {
   const adesso = Date.now();
   document.getElementById('oggi-lista').innerHTML = Object.entries(DIPENDENTI).map(([id, d]) => {
     const r = calcolaGiornata(id, giornataOggi, datiOggi, adesso);
-    const fasce = fascePreviste(id, giornataOggi);
+    const fasce = fasceConOrari(id, giornataOggi);
     const ultimo = r.turni[r.turni.length - 1];
+    const avvisi = [];
+    let inRitardo = false;
+    if (!r.ferie && !r.malattia && !r.assenza) {
+      // Turno iniziato da più di RITARDO_MIN minuti senza un'entrata per quel turno
+      const iniziato = fasce.find(f => adesso >= f.ini + RITARDO_MIN * 60000 && adesso < f.fin);
+      if (iniziato && !r.timbrature.some(x => x.tipo === 'entrata' && x.ts >= iniziato.ini - 3600000)) {
+        inRitardo = true;
+        avvisi.push('Non ha timbrato: il turno è iniziato alle ' + iniziato.a);
+      }
+      // Ancora "in servizio" ben oltre la fine del turno: probabile uscita dimenticata
+      if (r.inServizio && fasce.length && !fasce.some(f => adesso >= f.ini - 3600000 && adesso <= f.fin + OLTRE_TURNO_MIN * 60000)) {
+        const finito = fasce.filter(f => f.fin < adesso).pop();
+        if (finito) avvisi.push('Risulta ancora in servizio ma il turno è finito alle ' + finito.b + ': uscita dimenticata?');
+      }
+    }
     let stato;
     if (r.ferie) stato = '<span class="pos">🏖️ Ferie</span>';
     else if (r.malattia) stato = '<span class="neg">🤒 Malattia</span>';
+    else if (r.assenza) stato = '<span class="neg">⛔ Assente</span>';
+    else if (inRitardo) stato = '<span class="neg">⏰ Non timbrato</span>';
     else if (r.inServizio) stato = '<span class="ok">🟢 In servizio dalle ' + oraDi(ultimo.da) + '</span>';
     else if (ultimo) stato = '<span class="muted">🔴 Uscito alle ' + oraDi(ultimo.a) + '</span>';
     else stato = '<span class="muted">' + (fasce.length ? '— Non ancora timbrato' : '💤 Riposo') + '</span>';
-    return '<div class="stato-dip"><div><div style="font-weight:600">' + d.nome + '</div>' +
-      '<div class="piccolo muted">Previsto: ' + testoFasce(fasce) + '</div>' +
+    return '<div class="stato-dip"' + (avvisi.length ? ' style="border-color:var(--danger)"' : '') + '><div><div style="font-weight:600">' + d.nome + '</div>' +
+      '<div class="piccolo muted">Previsto: ' + testoFasce(fascePreviste(id, giornataOggi)) + '</div>' +
       (r.turni.length ? '<div class="piccolo" style="color:var(--teal-l);margin-top:2px">⏱ ' + fmtDurata(r.lavorati) + ' lavorate · ' + testoTurni(r) + '</div>' : '') +
-      (r.anomalie.length ? '<div class="nota-anom">⚠️ ' + r.anomalie.join(' · ') + '</div>' : '') +
+      avvisi.concat(r.anomalie).map(a => '<div class="nota-anom">⚠️ ' + esc(a) + '</div>').join('') +
       '</div><div style="text-align:right;font-weight:600;font-size:0.85rem">' + stato + '</div></div>';
   }).join('');
 }
@@ -217,10 +238,14 @@ function testoTurni(r, sep) {
 
 function noteGiorno(r) {
   const n = [];
+  if (r.primaAvvio) n.push('Prima dell\'avvio del registro');
   if (r.ferie) n.push('Ferie');
   if (r.malattia) n.push('Malattia');
+  if (r.assenza) n.push('Assenza (ore mancanti confermate)');
   if (!r.previsti && r.lavorati) n.push('Lavorato nel giorno di riposo');
   if (r.inCorso) n.push('Giornata in corso');
+  r.timbrature.filter(t => t.fonte === 'dipendente' && t.approvata).forEach(t =>
+    n.push('Ora dichiarata dal dipendente, approvata: ' + t.tipo + ' ' + oraDi(t.ts)));
   r.timbrature.filter(t => t.fonte === 'admin').forEach(t =>
     n.push('Aggiunta a mano: ' + t.tipo + (t.tipo === 'entrata' || t.tipo === 'uscita' ? ' ' + oraDi(t.ts) : '') + (t.nota ? ' (' + t.nota + ')' : '')));
   return n;
@@ -238,80 +263,102 @@ function renderReport() {
     [etichettaExtra(dipId), '+' + fmtDurata(tot.extra), tot.extra ? 'pos' : ''],
     ['Ore mancanti', '−' + fmtDurata(tot.mancanti), tot.mancanti ? 'neg' : ''],
     ['Ferie / Malattia', tot.ferie + ' / ' + tot.malattia + ' gg', ''],
-    ['Giorni da controllare', tot.anomalie, tot.anomalie ? 'neg' : 'ok'],
+    ['Giorni da sistemare', tot.anomalie, tot.anomalie ? 'neg' : 'ok'],
   ].map(([l, v, c]) => '<div class="kpi"><div class="kpi-v ' + c + '">' + v + '</div><div class="kpi-l">' + l + '</div></div>').join('');
 
   const corpo = giorni.map(r => {
     const dt = dataDaIso(r.giornata);
-    const cls = [r.previsti ? '' : 'riposo', r.futura ? 'futura' : '', r.anomalie.length ? 'anomalia' : ''].join(' ');
-    const vuota = r.futura || r.inCorso || (!r.previsti && !r.lavorati);
-    const diffCella = vuota ? '' :
+    const cls = [r.previsti ? '' : 'riposo', r.futura || r.primaAvvio ? 'futura' : '', r.daSistemare ? 'anomalia' : ''].join(' ');
+    const vuota = r.futura || r.inCorso || r.primaAvvio || (!r.previsti && !r.lavorati);
+    const diffCella = vuota ? '' : r.daSistemare ? '<span class="nota-anom" style="font-size:0.75rem">da sistemare</span>' :
       '<span class="' + (r.differenza > 0 ? 'pos' : r.differenza < 0 ? 'neg' : 'ok') + '">' + fmtDurata(r.differenza, true) + '</span>';
     const note = noteGiorno(r).map(esc).concat(r.anomalie.map(a => '<span class="nota-anom">⚠️ ' + esc(a) + '</span>'));
     return '<tr class="' + cls + '">' +
       '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b></td>' +
       '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata)) + '</td>' +
-      '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : '')) + '</td>' +
+      '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : r.assenza ? '⛔' : '')) + '</td>' +
       '<td class="num">' + (r.previsti ? fmtDurata(r.previsti) : '') + '</td>' +
       '<td class="num">' + (r.lavorati ? fmtDurata(r.lavorati) : '') + '</td>' +
       '<td class="num">' + diffCella + '</td>' +
       '<td class="piccolo">' + note.join('<br>') + '</td>' +
-      '<td>' + (r.futura ? '' : '<button class="btn btn-o btn-sm" title="Correggi" onclick="apriCorrezione(\'' + r.giornata + '\')">✎</button>') + '</td></tr>';
+      '<td>' + (r.futura ? '' : '<button class="btn ' + (r.daSistemare ? 'btn-g' : 'btn-o') + ' btn-sm" title="Correggi" onclick="apriCorrezione(\'' + r.giornata + '\')">✎</button>') + '</td></tr>';
   }).join('');
 
   document.getElementById('rep-tabella').innerHTML =
     '<thead><tr><th>Giorno</th><th>Orario previsto</th><th>Timbrature</th><th class="num">Previste</th><th class="num">Lavorate</th><th class="num">Differenza</th><th>Note</th><th></th></tr></thead>' +
     '<tbody>' + corpo + '</tbody>' +
     '<tfoot><tr><td colspan="3">Totale mese</td><td class="num">' + fmtDurata(tot.previsti) + '</td><td class="num">' + fmtDurata(tot.lavorati) + '</td>' +
-    '<td class="num"><span class="pos">+' + fmtDurata(tot.extra) + '</span><br><span class="neg">−' + fmtDurata(tot.mancanti) + '</span></td><td colspan="2"></td></tr></tfoot>';
+    '<td class="num"><span class="pos">+' + fmtDurata(tot.extra) + '</span><br><span class="neg">−' + fmtDurata(tot.mancanti) + '</span></td><td colspan="2"></td></tr>' +
+    (tot.anomalie ? '<tr><td colspan="8" class="nota-anom" style="font-size:0.8rem">⚠️ ' + tot.anomalie + (tot.anomalie === 1 ? ' giorno da sistemare NON è' : ' giorni da sistemare NON sono') + ' nei totali: correggili con ✎</td></tr>' : '') +
+    '</tfoot>';
 
   document.getElementById('rep-note').innerHTML =
     'Ore in h:mm, al minuto, senza arrotondamenti. Differenza = lavorate − previste, giornata per giornata. ' +
     'Le timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 contano sulla giornata precedente. ' +
-    'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti.';
+    'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti. ' +
+    'I giorni con timbrature mancanti o ore dichiarate da approvare restano fuori dai totali finché non li sistemi.';
 
   if (document.getElementById('modale').dataset.giornata) apriCorrezione(document.getElementById('modale').dataset.giornata);
 }
 
 // ══ CORREZIONI ══
-const NOMI_TIPO = {entrata: '🟢 Entrata', uscita: '🔴 Uscita', ferie: '🏖️ Ferie', malattia: '🤒 Malattia'};
+const NOMI_TIPO = {entrata: '🟢 Entrata', uscita: '🔴 Uscita', ferie: '🏖️ Ferie', malattia: '🤒 Malattia', assenza: '⛔ Assenza'};
 
 function apriCorrezione(giornata) {
   const dipId = document.getElementById('sel-dip').value;
   const t = datiReport.filter(x => x.dip === dipId && x.giornata === giornata).sort((a, b) => a.ts - b.ts);
+  const r = calcolaGiornata(dipId, giornata, datiReport, Date.now());
   const modale = document.getElementById('modale');
   const bozza = modale.dataset.giornata === giornata && document.getElementById('c-tipo')
     ? {tipo: document.getElementById('c-tipo').value, ora: document.getElementById('c-ora').value, nota: document.getElementById('c-nota').value}
     : {tipo: 'entrata', ora: '', nota: ''};
   modale.dataset.giornata = giornata;
+
+  const righe = t.length ? t.map(x => {
+    const daApprovare = x.fonte === 'dipendente' && !x.approvata && !x.annullata;
+    return '<div class="riga ' + x.tipo + '"' + (x.annullata ? ' style="opacity:.45"' : '') + '>' +
+      '<span class="riga-t"' + (x.annullata ? ' style="text-decoration:line-through"' : '') + '>' + NOMI_TIPO[x.tipo] +
+      (x.fonte === 'admin' ? '<span class="tag tag-admin">a mano</span>' : '') +
+      (x.fonte === 'dipendente' ? '<span class="tag tag-admin">' + (x.approvata ? 'dichiarata · approvata' : 'dichiarata dal dipendente') + '</span>' : '') +
+      (x.nota && x.fonte !== 'dipendente' ? '<div class="piccolo muted" style="font-weight:400">' + esc(x.nota) + '</div>' : '') + '</span>' +
+      '<span class="riga-o">' + (x.tipo === 'entrata' || x.tipo === 'uscita' ? oraDi(x.ts) : '') + '</span>' +
+      (x.annullata ? '<span class="piccolo muted">annullata</span>' :
+        '<span style="display:flex;gap:6px">' +
+        (daApprovare ? '<button class="btn btn-t btn-sm" onclick="approvaTimbratura(\'' + x.id + '\')">Approva</button>' : '') +
+        '<button class="btn btn-o btn-sm" onclick="annullaTimbratura(\'' + x.id + '\')">Annulla</button></span>') +
+      '</div>';
+  }).join('') : '<div class="vuoto">Nessuna timbratura</div>';
+
+  const rapide = r.suggerimenti.map(sg => sg.tipo === 'orario-completo'
+    ? '<button class="btn btn-t btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'orario-completo\',\'\')">➕ Ha lavorato l\'orario previsto (' + testoFasce(fascePreviste(dipId, giornata)) + ')</button>' +
+      '<button class="btn btn-o btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'assenza\',\'\')">⛔ Era assente (ore mancanti)</button>'
+    : '<button class="btn btn-t btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'' + sg.tipo + '\',\'' + sg.ora + '\')">➕ ' + NOMI_TIPO[sg.tipo].slice(3) + ' alle ' + sg.ora + ' (' + sg.motivo + ')</button>'
+  ).join('');
+
   modale.innerHTML =
     '<div class="modale-bg" onclick="if(event.target===this)chiudiModale()"><div class="modale">' +
     '<div class="card-t">' + DIPENDENTI[dipId].breve + ' — ' + fmtDataLunga(giornata) + '</div>' +
     '<div class="piccolo muted" style="margin-bottom:10px">Previsto: ' + testoFasce(fascePreviste(dipId, giornata)) + '</div>' +
-    (t.length ? t.map(x =>
-      '<div class="riga ' + x.tipo + '"' + (x.annullata ? ' style="opacity:.45"' : '') + '>' +
-      '<span class="riga-t"' + (x.annullata ? ' style="text-decoration:line-through"' : '') + '>' + NOMI_TIPO[x.tipo] +
-      (x.fonte === 'admin' ? '<span class="tag tag-admin">a mano</span>' : '') +
-      (x.nota ? '<div class="piccolo muted" style="font-weight:400">' + esc(x.nota) + '</div>' : '') + '</span>' +
-      '<span class="riga-o">' + (x.tipo === 'entrata' || x.tipo === 'uscita' ? oraDi(x.ts) : '') + '</span>' +
-      (x.annullata ? '<span class="piccolo muted">annullata</span>' : '<button class="btn btn-o btn-sm" onclick="annullaTimbratura(\'' + x.id + '\')">Annulla</button>') +
-      '</div>').join('') : '<div class="vuoto">Nessuna timbratura</div>') +
+    (r.anomalie.length ? '<div style="margin-bottom:10px">' + r.anomalie.map(a => '<div class="nota-anom" style="font-size:0.82rem">⚠️ ' + esc(a) + '</div>').join('') + '</div>' : '') +
+    righe +
+    (rapide ? '<div class="card-t" style="margin-top:16px;font-size:0.9rem">Correzione rapida</div>' + rapide : '') +
     '<div class="card-t" style="margin-top:16px;font-size:0.9rem">Aggiungi a mano</div>' +
     '<div class="form-riga">' +
     '<div><label for="c-tipo">Tipo</label><select id="c-tipo" onchange="aggiornaCampoOra()">' +
-    ['entrata', 'uscita', 'ferie', 'malattia'].map(v => '<option value="' + v + '"' + (v === bozza.tipo ? ' selected' : '') + '>' + NOMI_TIPO[v].slice(3) + '</option>').join('') + '</select></div>' +
+    ['entrata', 'uscita', 'ferie', 'malattia', 'assenza'].map(v => '<option value="' + v + '"' + (v === bozza.tipo ? ' selected' : '') + '>' + NOMI_TIPO[v].slice(3) + '</option>').join('') + '</select></div>' +
     '<div id="c-ora-box"><label for="c-ora">Ora</label><input type="time" id="c-ora" value="' + bozza.ora + '"></div></div>' +
     '<label for="c-nota">Motivo (resta nel registro)</label><input id="c-nota" placeholder="es. dimenticata uscita" value="' + esc(bozza.nota) + '">' +
     '<div style="display:flex;gap:8px;margin-top:14px">' +
     '<button class="btn btn-g" style="flex:1" onclick="aggiungiTimbratura(\'' + dipId + '\',\'' + giornata + '\')">Aggiungi</button>' +
     '<button class="btn btn-o" onclick="chiudiModale()">Chiudi</button></div>' +
-    '<div class="piccolo muted" style="margin-top:10px">Un orario prima delle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 viene messo sulla notte dopo questa giornata. Annullare non cancella: la timbratura resta visibile barrata.</div>' +
+    '<div class="piccolo muted" style="margin-top:10px">Un orario prima delle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 viene messo sulla notte dopo questa giornata. ' +
+    'Annullare non cancella: la timbratura resta visibile barrata. "Assenza" conferma le ore mancanti e toglie l\'avviso.</div>' +
     '</div></div>';
   aggiornaCampoOra();
 }
 function aggiornaCampoOra() {
   const tipo = document.getElementById('c-tipo').value;
-  document.getElementById('c-ora-box').hidden = tipo === 'ferie' || tipo === 'malattia';
+  document.getElementById('c-ora-box').hidden = TIPI_GIORNATA.includes(tipo);
 }
 function chiudiModale() {
   const m = document.getElementById('modale');
@@ -320,26 +367,57 @@ function chiudiModale() {
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c])); }
 
+// Scrive una timbratura inserita dall'admin
+async function inserisci(dipId, giornata, tipo, ora, nota) {
+  const ts = tsDaGiornataOra(giornata, ora || '12:00');
+  const doc = {dip: dipId, tipo, giornata, tsClient: ts, fonte: 'admin', nota};
+  if (MODALITA_DEMO) {
+    datiReport.push(Object.assign({id: 'demo' + Math.random(), ts, tsServer: null, orologioDiverso: false, annullata: false, approvata: false, inAttesa: false}, doc));
+    return;
+  }
+  doc.ts = firebase.firestore.Timestamp.fromMillis(ts);
+  doc.inseritaIl = firebase.firestore.FieldValue.serverTimestamp();
+  await db.collection(COLLEZIONE).add(doc);
+}
+
 async function aggiungiTimbratura(dipId, giornata) {
   const tipo = document.getElementById('c-tipo').value;
   const ora = document.getElementById('c-ora').value;
   const nota = document.getElementById('c-nota').value.trim();
-  const conOra = tipo === 'entrata' || tipo === 'uscita';
+  const conOra = !TIPI_GIORNATA.includes(tipo);
   if (conOra && !ora) { mostraToast('Inserisci l\'ora', true); return; }
-  const ts = tsDaGiornataOra(giornata, conOra ? ora : '12:00');
-  const doc = {dip: dipId, tipo, giornata, tsClient: ts, fonte: 'admin', nota};
   try {
     document.getElementById('c-ora').value = '';
     document.getElementById('c-nota').value = '';
-    if (MODALITA_DEMO) {
-      datiReport.push(Object.assign({id: 'demo' + Date.now(), ts, tsServer: null, orologioDiverso: false, annullata: false, inAttesa: false}, doc));
-      renderReport();
-    } else {
-      doc.ts = firebase.firestore.Timestamp.fromMillis(ts);
-      doc.inseritaIl = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection(COLLEZIONE).add(doc);
-    }
+    await inserisci(dipId, giornata, tipo, conOra ? ora : '', nota);
+    if (MODALITA_DEMO) renderReport();
     mostraToast('Timbratura aggiunta');
+  } catch (e) { mostraToast('Errore: ' + e.message, true); }
+}
+
+async function correzioneRapida(dipId, giornata, tipo, ora) {
+  try {
+    if (tipo === 'orario-completo') {
+      for (const [a, b] of fascePreviste(dipId, giornata)) {
+        await inserisci(dipId, giornata, 'entrata', a, 'Inserito orario previsto');
+        await inserisci(dipId, giornata, 'uscita', b, 'Inserito orario previsto');
+      }
+    } else if (tipo === 'assenza') {
+      await inserisci(dipId, giornata, 'assenza', '', 'Assenza confermata');
+    } else {
+      await inserisci(dipId, giornata, tipo, ora, 'Completata con orario previsto');
+    }
+    if (MODALITA_DEMO) renderReport();
+    mostraToast('Correzione salvata');
+  } catch (e) { mostraToast('Errore: ' + e.message, true); }
+}
+
+async function approvaTimbratura(id) {
+  const x = datiReport.find(d => d.id === id);
+  try {
+    if (MODALITA_DEMO) { x.approvata = true; renderReport(); }
+    else await db.collection(COLLEZIONE).doc(id).update({approvata: true, approvataIl: firebase.firestore.FieldValue.serverTimestamp()});
+    mostraToast('Ora approvata');
   } catch (e) { mostraToast('Errore: ' + e.message, true); }
 }
 
@@ -360,19 +438,22 @@ function nomeMese(mese) {
 }
 function righeExport() {
   const {dipId, mese, giorni, tot} = ultimoReport;
-  const righe = giorni.filter(r => !r.futura).map(r => {
+  const righe = giorni.filter(r => !r.futura && !r.primaAvvio).map(r => {
     const dt = dataDaIso(r.giornata);
     return [
       GIORNI_BREVI[dt.getDay()] + ' ' + pad(dt.getDate()) + '/' + mese.slice(5, 7),
       testoFasce(fascePreviste(dipId, r.giornata)).replace(/–/g, '-'),
-      testoTurni(r).replace(/–/g, '-').replace('…', '...') || (r.ferie ? 'Ferie' : r.malattia ? 'Malattia' : ''),
+      testoTurni(r).replace(/–/g, '-').replace('…', '...') || (r.ferie ? 'Ferie' : r.malattia ? 'Malattia' : r.assenza ? 'Assenza' : ''),
       r.previsti ? fmtDurata(r.previsti) : '',
       r.lavorati ? fmtDurata(r.lavorati) : '',
-      (r.inCorso || (!r.previsti && !r.lavorati)) ? '' : fmtDurata(r.differenza, true).replace('−', '-'),
-      noteGiorno(r).concat(r.anomalie.map(a => 'DA CONTROLLARE: ' + a)).join('; ')
+      (r.inCorso || (!r.previsti && !r.lavorati)) ? '' : r.daSistemare ? 'DA SISTEMARE' : fmtDurata(r.differenza, true).replace('−', '-'),
+      noteGiorno(r).concat(r.anomalie.map(a => 'DA SISTEMARE: ' + a)).join('; ')
     ];
   });
   return {dipId, mese, tot, righe};
+}
+function avvisoDaSistemare(tot) {
+  return tot.anomalie ? 'ATTENZIONE: ' + tot.anomalie + (tot.anomalie === 1 ? ' giorno da sistemare escluso' : ' giorni da sistemare esclusi') + ' dai totali - report provvisorio' : '';
 }
 function sottotitolo() {
   return MODALITA_DEMO ? ' - DATI DEMO' : COLLEZIONE.includes('prova') ? ' - ARCHIVIO DI PROVA' : '';
@@ -389,8 +470,13 @@ function esportaPDF() {
   pdf.text(d.nome + '  |  ' + d.reparto + '  |  Contratto ' + d.oreSett + ' h/settimana  |  ' + nomeMese(mese), 14, 22);
   pdf.text('Previste ' + fmtDurata(tot.previsti) + '    Lavorate ' + fmtDurata(tot.lavorati) + '    ' + etichettaExtra(dipId) + ' +' + fmtDurata(tot.extra) +
     '    Mancanti -' + fmtDurata(tot.mancanti) + '    Ferie ' + tot.ferie + ' gg    Malattia ' + tot.malattia + ' gg', 14, 28);
+  if (tot.anomalie) {
+    pdf.setTextColor(200, 40, 40); pdf.setFont('helvetica', 'bold');
+    pdf.text(avvisoDaSistemare(tot), 14, 34);
+    pdf.setTextColor(0, 0, 0); pdf.setFont('helvetica', 'normal');
+  }
   pdf.autoTable({
-    startY: 33,
+    startY: tot.anomalie ? 38 : 33,
     head: [['Giorno', 'Orario previsto', 'Timbrature', 'Previste', 'Lavorate', 'Differenza', 'Note']],
     body: righe,
     foot: [['Totale', '', '', fmtDurata(tot.previsti), fmtDurata(tot.lavorati), '+' + fmtDurata(tot.extra) + ' / -' + fmtDurata(tot.mancanti), '']],
@@ -414,7 +500,7 @@ function esportaExcel() {
   const aoa = [
     ["Ristorante L'Ancora - Registro presenze" + sottotitolo()],
     [d.nome, d.reparto, 'Contratto ' + d.oreSett + ' h/sett.', nomeMese(mese)],
-    [],
+    [avvisoDaSistemare(tot)],
     ['Giorno', 'Orario previsto', 'Timbrature', 'Previste (h:mm)', 'Lavorate (h:mm)', 'Differenza (h:mm)', 'Note'],
     ...righe,
     [],
