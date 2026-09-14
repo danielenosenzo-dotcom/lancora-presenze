@@ -41,6 +41,7 @@ function tick() {
   const g = giornataDi(adesso);
   if (g !== giornataCorrente) { giornataCorrente = g; ascolta(); }
   render();
+  controllaFineTurno(adesso);
 }
 
 // ══ ASCOLTO IN TEMPO REALE ══
@@ -71,6 +72,65 @@ function render() {
   const inServizio = ultima && ultima.tipo === 'entrata';
   document.getElementById('b-entrata').classList.toggle('suggerita', !inServizio);
   document.getElementById('b-uscita').classList.toggle('suggerita', !!inServizio);
+}
+
+// ══ AVVISO FINE TURNO ══
+// Se la pagina è aperta (o viene riaperta) dopo la fine del turno e l'uscita non è stata timbrata,
+// compare da sola la domanda. "Sto ancora lavorando" la rimanda di RIMANDA_MIN minuti.
+const FINE_TURNO_TOLLERANZA_MIN = 15;
+const RIMANDA_MIN = 30;
+let avvisoFineTurno = null;
+
+function controllaFineTurno(adesso) {
+  if (document.getElementById('modale').innerHTML) return;
+  const ultima = ultimaTimbratura();
+  if (!ultima || ultima.tipo !== 'entrata') return;
+  const f = fasciaPiuVicina(fasceConOrari(DIP_ID, giornataCorrente), ultima.ts, 'ini');
+  if (!f || f.fin <= ultima.ts || adesso < f.fin + FINE_TURNO_TOLLERANZA_MIN * 60000) return;
+  let rimandato = 0;
+  try { rimandato = Number(localStorage.getItem('presenze_rimanda_' + ultima.id)) || 0; } catch (e) {}
+  if (adesso < rimandato) return;
+
+  avvisoFineTurno = {entrata: ultima, fascia: f};
+  if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+  document.getElementById('modale').innerHTML =
+    '<div class="modale-bg"><div class="modale">' +
+    '<div class="card-t">⏰ Il tuo turno è finito alle ' + f.b + '</div>' +
+    '<div style="font-size:0.92rem;line-height:1.45">Sei entrato alle <b>' + oraDi(ultima.ts) + '</b> e non hai ancora timbrato l\'uscita.</div>' +
+    '<button class="btn btn-d btn-blocco" style="margin-top:16px;padding:15px;font-size:1rem" onclick="fineTurnoEscoAdesso()">🔴 Timbra l\'uscita adesso</button>' +
+    '<div class="card" style="margin:12px 0 0;padding:12px">' +
+    '<label for="f-ora" style="margin-top:0">Sono uscito prima, alle</label>' +
+    '<div style="display:flex;gap:8px"><input type="time" id="f-ora" value="' + f.b + '" style="font-size:1.1rem;text-align:center">' +
+    '<button class="btn btn-g" onclick="fineTurnoUscitoAlle()">Conferma</button></div>' +
+    '<div class="piccolo muted" style="margin-top:6px">L\'ora che scrivi viene segnalata al titolare, che la controlla.</div></div>' +
+    '<button class="btn btn-o btn-blocco" style="margin-top:12px" onclick="fineTurnoAncoraAlLavoro()">Sto ancora lavorando</button>' +
+    '</div></div>';
+}
+
+function fineTurnoEscoAdesso() {
+  avvisoFineTurno = null;
+  document.getElementById('modale').innerHTML = '';
+  registra('uscita');
+}
+
+function fineTurnoUscitoAlle() {
+  const ora = document.getElementById('f-ora').value;
+  if (!ora) { mostraToast('Scrivi l\'ora', true); return; }
+  const ts = tsDaGiornataOra(giornataCorrente, ora);
+  const {entrata} = avvisoFineTurno;
+  if (ts >= Date.now()) { mostraToast('L\'ora deve essere prima di adesso', true); return; }
+  if (ts <= entrata.ts) { mostraToast('L\'ora deve essere dopo le ' + oraDi(entrata.ts), true); return; }
+  salva({dip: DIP_ID, tipo: 'uscita', giornata: giornataCorrente, tsClient: ts, fonte: 'dipendente', nota: 'Ora dichiarata dal dipendente'}, ts);
+  avvisoFineTurno = null;
+  document.getElementById('modale').innerHTML = '';
+  mostraToast('✅ Uscita delle ' + ora + ' registrata');
+}
+
+function fineTurnoAncoraAlLavoro() {
+  try { localStorage.setItem('presenze_rimanda_' + avvisoFineTurno.entrata.id, String(Date.now() + RIMANDA_MIN * 60000)); } catch (e) {}
+  avvisoFineTurno = null;
+  document.getElementById('modale').innerHTML = '';
+  mostraToast('Ok, te lo richiedo tra ' + RIMANDA_MIN + ' minuti');
 }
 
 // ══ TIMBRA ══
