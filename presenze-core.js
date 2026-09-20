@@ -228,12 +228,14 @@ function calcolaMese(dipId, mese, timbrature, adessoMs) {
     giorni.push(r);
     if (r.futura || r.inCorso || r.primaAvvio) continue;
     if (r.daSistemare) { tot.anomalie++; continue; }
+    if (r.ferie) tot.ferie++;
+    if (r.malattia) tot.malattia++;
+    // Ferie e malattia si contano in giorni, non in ore: fuori dal confronto previste/lavorate
+    if (r.ferie || r.malattia) { tot.dimenticate += r.automatiche.length; continue; }
     tot.previsti += r.previsti;
     tot.lavorati += r.lavorati;
     if (r.differenza > 0) tot.extra += r.differenza;
     if (r.differenza < 0) tot.mancanti += -r.differenza;
-    if (r.ferie) tot.ferie++;
-    if (r.malattia) tot.malattia++;
     if (r.assenza) tot.assenze++;
     tot.dimenticate += r.automatiche.length;
   }

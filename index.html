@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1f2d">
 <title>L'Ancora — Presenze (Admin)</title>
-<link rel="stylesheet" href="stile.css">
+<link rel="stylesheet" href="stile.css?v=202609201246">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -62,8 +62,10 @@
           <button class="btn btn-t" onclick="esportaExcel()">⬇️ Excel</button>
         </div>
       </div>
+      <div id="rep-avvisi"></div>
       <div class="kpi-riga" id="rep-kpi"></div>
-      <div class="tab-scroll"><table class="rep" id="rep-tabella"></table></div>
+      <div class="solo-largo tab-scroll"><table class="rep" id="rep-tabella"></table></div>
+      <div class="solo-stretto" id="rep-schede"></div>
       <div class="piccolo muted" style="margin-top:10px" id="rep-note"></div>
     </div>
   </section>
@@ -81,7 +83,7 @@
 <div id="modale"></div>
 <div class="toast" id="toast"></div>
 
-<script src="presenze-core.js"></script>
+<script src="presenze-core.js?v=202609201246"></script>
 <script>
 // ══ PIN ══
 let pin = '';
@@ -223,6 +225,7 @@ function caricaReport() {
     renderReport();
     return;
   }
+  document.getElementById('rep-schede').innerHTML = '<div class="vuoto">Caricamento…</div>';
   document.getElementById('rep-tabella').innerHTML = '<tr><td class="vuoto">Caricamento…</td></tr>';
   // Un giorno di margine ai bordi: la giornata viene poi ricalcolata sull'ora del server
   annullaReport = db.collection(COLLEZIONE)
@@ -253,50 +256,132 @@ function noteGiorno(r) {
   return n;
 }
 
+// Raggruppa le giornate per settimana (lunedì-domenica): utile perché lo straordinario
+// per legge si misura sulle 40 ore settimanali, non solo giorno per giorno
+function settimaneDi(giorni) {
+  const sett = [];
+  let corrente = null;
+  for (const r of giorni) {
+    const d = dataDaIso(r.giornata);
+    const lunedi = aggiungiGiorni(r.giornata, -((d.getDay() + 6) % 7));
+    if (!corrente || corrente.lunedi !== lunedi) {
+      corrente = {lunedi, giorni: [], previsti: 0, lavorati: 0, differenza: 0, daSistemare: 0, assenze: 0};
+      sett.push(corrente);
+    }
+    corrente.giorni.push(r);
+    if (r.futura || r.inCorso || r.primaAvvio) continue;
+    if (r.daSistemare) { corrente.daSistemare++; continue; }
+    if (r.ferie || r.malattia) { corrente.assenze++; continue; }   // contate in giorni, non in ore
+    corrente.previsti += r.previsti;
+    corrente.lavorati += r.lavorati;
+    corrente.differenza += r.differenza;
+  }
+  return sett;
+}
+
+function titoloSettimana(st) {
+  const primo = st.giorni[0], ultimo = st.giorni[st.giorni.length - 1];
+  const d1 = dataDaIso(primo.giornata), d2 = dataDaIso(ultimo.giornata);
+  return 'Settimana ' + d1.getDate() + '–' + d2.getDate() +
+    (d1.getMonth() !== d2.getMonth() ? ' ' + d2.toLocaleDateString('it-IT', {month: 'short'}) : '');
+}
+function riassuntoSettimana(st) {
+  if (!st.previsti && !st.lavorati && !st.assenze && !st.daSistemare) return 'riposo';
+  return 'previste ' + fmtDurata(st.previsti) + ' · lavorate ' + fmtDurata(st.lavorati) +
+    ' · ' + fmtDurata(st.differenza, true) +
+    (st.assenze ? ' · ' + st.assenze + (st.assenze === 1 ? ' g ferie/malattia' : ' gg ferie/malattia') : '') +
+    (st.daSistemare ? ' · ' + st.daSistemare + ' da sistemare' : '');
+}
+
+function classeDiff(r) { return r.differenza > 0 ? 'pos' : r.differenza < 0 ? 'neg' : 'ok'; }
+function vuotaDiff(r) { return r.futura || r.inCorso || r.primaAvvio || (!r.previsti && !r.lavorati); }
+
 function renderReport() {
   const dipId = document.getElementById('sel-dip').value;
   const mese = document.getElementById('sel-mese').value;
   const {giorni, tot} = calcolaMese(dipId, mese, datiReport, Date.now());
   ultimoReport = {dipId, mese, giorni, tot};
+  const settimane = settimaneDi(giorni);
 
+  // ── Box in cima: cosa c'è da sistemare ──
+  const daSistemare = giorni.filter(r => r.daSistemare);
+  document.getElementById('rep-avvisi').innerHTML = daSistemare.length
+    ? '<div class="avviso-box ko"><div class="titolo">⚠️ ' + daSistemare.length +
+      (daSistemare.length === 1 ? ' giorno da sistemare, escluso dai totali' : ' giorni da sistemare, esclusi dai totali') + '</div>' +
+      '<div class="avviso-lista">' + daSistemare.map(r => {
+        const dt = dataDaIso(r.giornata);
+        return '<button onclick="apriCorrezione(\'' + r.giornata + '\')">✎ ' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</button>';
+      }).join('') + '</div></div>'
+    : '<div class="avviso-box ok">✅ Nessun giorno da sistemare: i totali sono definitivi.</div>';
+
+  // ── Totali del mese ──
   document.getElementById('rep-kpi').innerHTML = [
-    ['Ore previste', fmtDurata(tot.previsti), ''],
     ['Ore lavorate', fmtDurata(tot.lavorati), ''],
+    ['Ore previste', fmtDurata(tot.previsti), ''],
     [etichettaExtra(dipId), '+' + fmtDurata(tot.extra), tot.extra ? 'pos' : ''],
     ['Ore mancanti', '−' + fmtDurata(tot.mancanti), tot.mancanti ? 'neg' : ''],
     ['Ferie / Malattia', tot.ferie + ' / ' + tot.malattia + ' gg', ''],
     ['Timbrature dimenticate', tot.dimenticate, tot.dimenticate ? 'pos' : 'ok'],
-    ['Giorni da sistemare', tot.anomalie, tot.anomalie ? 'neg' : 'ok'],
   ].map(([l, v, c]) => '<div class="kpi"><div class="kpi-v ' + c + '">' + v + '</div><div class="kpi-l">' + l + '</div></div>').join('');
 
-  const corpo = giorni.map(r => {
-    const dt = dataDaIso(r.giornata);
-    const cls = [r.previsti ? '' : 'riposo', r.futura || r.primaAvvio ? 'futura' : '', r.daSistemare ? 'anomalia' : ''].join(' ');
-    const vuota = r.futura || r.inCorso || r.primaAvvio || (!r.previsti && !r.lavorati);
-    const diffCella = vuota ? '' : r.daSistemare ? '<span class="nota-anom" style="font-size:0.75rem">da sistemare</span>' :
-      '<span class="' + (r.differenza > 0 ? 'pos' : r.differenza < 0 ? 'neg' : 'ok') + '">' + fmtDurata(r.differenza, true) + '</span>';
-    const note = noteGiorno(r).map(esc).concat(r.anomalie.map(a => '<span class="nota-anom">⚠️ ' + esc(a) + '</span>'));
-    return '<tr class="' + cls + '">' +
-      '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b></td>' +
-      '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata)) + '</td>' +
-      '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : r.assenza ? '⛔' : '')) + '</td>' +
-      '<td class="num">' + (r.previsti ? fmtDurata(r.previsti) : '') + '</td>' +
-      '<td class="num">' + (r.lavorati ? fmtDurata(r.lavorati) : '') + '</td>' +
-      '<td class="num">' + diffCella + '</td>' +
-      '<td class="piccolo">' + note.join('<br>') + '</td>' +
-      '<td>' + (r.futura ? '' : '<button class="btn ' + (r.daSistemare ? 'btn-g' : 'btn-o') + ' btn-sm" title="Correggi" onclick="apriCorrezione(\'' + r.giornata + '\')">✎</button>') + '</td></tr>';
-  }).join('');
+  const noteHtml = r => noteGiorno(r).map(esc).concat(r.anomalie.map(a => '<span class="nota-anom">⚠️ ' + esc(a) + '</span>'));
+
+  // ── Tabella (schermo largo) ──
+  const corpo = settimane.map(st =>
+    '<tr class="sett-riga"><td colspan="8" style="padding:10px 6px 4px">' +
+    '<span style="color:var(--teal-l);font-weight:700;font-size:0.76rem">' + titoloSettimana(st) + '</span>' +
+    '<span class="muted" style="font-size:0.74rem"> — ' + riassuntoSettimana(st) + '</span></td></tr>' +
+    st.giorni.map(r => {
+      const dt = dataDaIso(r.giornata);
+      const cls = [r.previsti ? '' : 'riposo', r.futura || r.primaAvvio ? 'futura' : '', r.daSistemare ? 'anomalia' : ''].join(' ');
+      const diffCella = vuotaDiff(r) ? '' : r.daSistemare ? '<span class="nota-anom" style="font-size:0.75rem">da sistemare</span>' :
+        '<span class="' + classeDiff(r) + '">' + fmtDurata(r.differenza, true) + '</span>';
+      return '<tr class="' + cls + '">' +
+        '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b></td>' +
+        '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata)) + '</td>' +
+        '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : r.assenza ? '⛔' : '')) + '</td>' +
+        '<td class="num">' + (r.previsti ? fmtDurata(r.previsti) : '') + '</td>' +
+        '<td class="num">' + (r.lavorati ? fmtDurata(r.lavorati) : '') + '</td>' +
+        '<td class="num">' + diffCella + '</td>' +
+        '<td class="piccolo">' + noteHtml(r).join('<br>') + '</td>' +
+        '<td>' + (r.futura ? '' : '<button class="btn ' + (r.daSistemare ? 'btn-g' : 'btn-o') + ' btn-sm" title="Correggi" onclick="apriCorrezione(\'' + r.giornata + '\')">✎</button>') + '</td></tr>';
+    }).join('')).join('');
 
   document.getElementById('rep-tabella').innerHTML =
     '<thead><tr><th>Giorno</th><th>Orario previsto</th><th>Timbrature</th><th class="num">Previste</th><th class="num">Lavorate</th><th class="num">Differenza</th><th>Note</th><th></th></tr></thead>' +
     '<tbody>' + corpo + '</tbody>' +
     '<tfoot><tr><td colspan="3">Totale mese</td><td class="num">' + fmtDurata(tot.previsti) + '</td><td class="num">' + fmtDurata(tot.lavorati) + '</td>' +
-    '<td class="num"><span class="pos">+' + fmtDurata(tot.extra) + '</span><br><span class="neg">−' + fmtDurata(tot.mancanti) + '</span></td><td colspan="2"></td></tr>' +
-    (tot.anomalie ? '<tr><td colspan="8" class="nota-anom" style="font-size:0.8rem">⚠️ ' + tot.anomalie + (tot.anomalie === 1 ? ' giorno da sistemare NON è' : ' giorni da sistemare NON sono') + ' nei totali: correggili con ✎</td></tr>' : '') +
-    '</tfoot>';
+    '<td class="num"><span class="pos">+' + fmtDurata(tot.extra) + '</span><br><span class="neg">−' + fmtDurata(tot.mancanti) + '</span></td><td colspan="2"></td></tr></tfoot>';
+
+  // ── Schede (telefono) ──
+  document.getElementById('rep-schede').innerHTML = settimane.map(st =>
+    '<div class="sett-h"><span>' + titoloSettimana(st) + '</span><span class="sett-n">' + riassuntoSettimana(st) + '</span></div>' +
+    st.giorni.map(r => {
+      const dt = dataDaIso(r.giornata);
+      const giorno = GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate();
+      const cls = ['gg', r.previsti ? '' : 'riposo', r.futura || r.primaAvvio ? 'futura' : '', r.daSistemare ? 'anomalia' : ''].join(' ');
+      const apri = r.futura ? '' : ' onclick="apriCorrezione(\'' + r.giornata + '\')"';
+      if (!r.previsti && !r.lavorati && !r.ferie && !r.malattia)
+        return '<div class="' + cls + '"' + apri + '><div class="gg-top"><span class="gg-data">' + giorno + '</span><span class="piccolo muted">Riposo</span></div></div>';
+      const destra = r.daSistemare ? '<span class="nota-anom">da sistemare</span>'
+        : r.inCorso ? '<span class="piccolo muted">in corso</span>'
+        : vuotaDiff(r) ? '' : '<span class="gg-diff ' + classeDiff(r) + '">' + fmtDurata(r.differenza, true) + '</span>';
+      const orari = testoTurni(r) || (r.ferie ? '🏖️ Ferie' : r.malattia ? '🤒 Malattia' : r.assenza ? '⛔ Assenza' : '—');
+      return '<div class="' + cls + '"' + apri + '>' +
+        '<div class="gg-top"><span class="gg-data">' + giorno + '</span>' + destra + '</div>' +
+        '<div class="gg-orari">' + orari + '</div>' +
+        '<div class="gg-sotto">Previsto ' + testoFasce(fascePreviste(dipId, r.giornata)) +
+        (r.lavorati || r.previsti ? ' · lavorate ' + fmtDurata(r.lavorati) + ' su ' + fmtDurata(r.previsti) : '') + '</div>' +
+        noteHtml(r).map(n => '<div class="gg-sotto">' + n + '</div>').join('') +
+        '</div>';
+    }).join('')).join('') +
+    '<div class="sett-h" style="background:rgba(201,168,76,0.14);color:var(--gold-l)"><span>Totale ' + nomeMese(mese) + '</span>' +
+    '<span class="sett-n">previste ' + fmtDurata(tot.previsti) + ' · lavorate ' + fmtDurata(tot.lavorati) +
+    ' · <span class="pos">+' + fmtDurata(tot.extra) + '</span> / <span class="neg">−' + fmtDurata(tot.mancanti) + '</span></span></div>';
 
   document.getElementById('rep-note').innerHTML =
     'Ore in h:mm, al minuto, senza arrotondamenti. Differenza = lavorate − previste, giornata per giornata. ' +
+    'Le settimane vanno da lunedì a domenica. ' +
     'Le timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 contano sulla giornata precedente. ' +
     'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti. ' +
     '<b>*</b> = timbratura dimenticata: vale l\'orario da contratto (correggibile con ✎). ' +
@@ -520,6 +605,20 @@ function esportaExcel() {
   ws['!cols'] = [{wch: 11}, {wch: 26}, {wch: 26}, {wch: 15}, {wch: 15}, {wch: 17}, {wch: 60}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, nomeMese(mese).slice(0, 31));
+
+  // Secondo foglio: totali settimana per settimana (lo straordinario per legge si misura sulle 40 ore settimanali)
+  const wsSett = XLSX.utils.aoa_to_sheet([
+    [d.nome + ' - ' + nomeMese(mese) + ' - totali per settimana'],
+    ['Settimana', 'Dal', 'Al', 'Previste (h:mm)', 'Lavorate (h:mm)', 'Differenza (h:mm)', 'Giorni da sistemare'],
+    ...settimaneDi(ultimoReport.giorni).map(st => [
+      titoloSettimana(st),
+      dataDaIso(st.giorni[0].giornata).toLocaleDateString('it-IT'),
+      dataDaIso(st.giorni[st.giorni.length - 1].giornata).toLocaleDateString('it-IT'),
+      fmtDurata(st.previsti), fmtDurata(st.lavorati), fmtDurata(st.differenza, true).replace('−', '-'), st.daSistemare || ''
+    ])
+  ]);
+  wsSett['!cols'] = [{wch: 18}, {wch: 12}, {wch: 12}, {wch: 15}, {wch: 15}, {wch: 17}, {wch: 20}];
+  XLSX.utils.book_append_sheet(wb, wsSett, 'Settimane');
   XLSX.writeFile(wb, 'Presenze_' + d.breve + '_' + mese + '.xlsx');
 }
 
