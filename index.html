@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d1f2d">
 <title>L'Ancora — Presenze (Admin)</title>
-<link rel="stylesheet" href="stile.css?v=202609201246">
+<link rel="stylesheet" href="stile.css?v=202610122307">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -83,7 +83,7 @@
 <div id="modale"></div>
 <div class="toast" id="toast"></div>
 
-<script src="presenze-core.js?v=202609201246"></script>
+<script src="presenze-core.js?v=202610122307"></script>
 <script>
 // ══ PIN ══
 let pin = '';
@@ -209,7 +209,7 @@ function renderOggi() {
     else if (ultimo) stato = '<span class="muted">🔴 Uscito alle ' + oraDi(ultimo.a) + '</span>';
     else stato = '<span class="muted">' + (fasce.length ? '— Non ancora timbrato' : '💤 Riposo') + '</span>';
     return '<div class="stato-dip"' + (avvisi.length ? ' style="border-color:var(--danger)"' : '') + '><div><div style="font-weight:600">' + d.nome + '</div>' +
-      '<div class="piccolo muted">Previsto: ' + testoFasce(fascePreviste(id, giornataOggi)) + '</div>' +
+      '<div class="piccolo muted">Previsto: ' + testoFasce(fascePreviste(id, giornataOggi), giornataOggi) + '</div>' +
       (r.turni.length ? '<div class="piccolo" style="color:var(--teal-l);margin-top:2px">⏱ ' + fmtDurata(r.lavorati) + ' lavorate · ' + testoTurni(r) + '</div>' : '') +
       avvisi.concat(r.anomalie).map(a => '<div class="nota-anom">⚠️ ' + esc(a) + '</div>').join('') +
       '</div><div style="text-align:right;font-weight:600;font-size:0.85rem">' + stato + '</div></div>';
@@ -242,6 +242,8 @@ function testoTurni(r, sep) {
 
 function noteGiorno(r) {
   const n = [];
+  if (r.chiusura) n.push('Locale chiuso');
+  if (r.festivo) n.push('Festivo: ' + r.festivo + (r.lavorati ? ' (lavorato)' : ''));
   if (r.primaAvvio) n.push('Prima dell\'avvio del registro');
   if (r.ferie) n.push('Ferie');
   if (r.malattia) n.push('Malattia');
@@ -321,6 +323,7 @@ function renderReport() {
     [etichettaExtra(dipId), '+' + fmtDurata(tot.extra), tot.extra ? 'pos' : ''],
     ['Ore mancanti', '−' + fmtDurata(tot.mancanti), tot.mancanti ? 'neg' : ''],
     ['Ferie / Malattia', tot.ferie + ' / ' + tot.malattia + ' gg', ''],
+    ['Festivi lavorati', tot.festivi + (tot.festivi ? ' gg · ' + fmtDurata(tot.oreFestivi) : ' gg'), tot.festivi ? 'pos' : ''],
     ['Timbrature dimenticate', tot.dimenticate, tot.dimenticate ? 'pos' : 'ok'],
   ].map(([l, v, c]) => '<div class="kpi"><div class="kpi-v ' + c + '">' + v + '</div><div class="kpi-l">' + l + '</div></div>').join('');
 
@@ -337,8 +340,10 @@ function renderReport() {
       const diffCella = vuotaDiff(r) ? '' : r.daSistemare ? '<span class="nota-anom" style="font-size:0.75rem">da sistemare</span>' :
         '<span class="' + classeDiff(r) + '">' + fmtDurata(r.differenza, true) + '</span>';
       return '<tr class="' + cls + '">' +
-        '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b></td>' +
-        '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata)) + '</td>' +
+        '<td style="white-space:nowrap"><b>' + GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() + '</b>' +
+          (r.festivo ? '<div class="piccolo" style="color:var(--gold-l)">' + r.festivo + '</div>' : '') +
+          (r.chiusura ? '<div class="piccolo muted">chiuso</div>' : '') + '</td>' +
+        '<td class="piccolo">' + testoFasce(fascePreviste(dipId, r.giornata), r.giornata) + '</td>' +
         '<td style="white-space:nowrap">' + (testoTurni(r, '<br>') || (r.ferie ? '🏖️' : r.malattia ? '🤒' : r.assenza ? '⛔' : '')) + '</td>' +
         '<td class="num">' + (r.previsti ? fmtDurata(r.previsti) : '') + '</td>' +
         '<td class="num">' + (r.lavorati ? fmtDurata(r.lavorati) : '') + '</td>' +
@@ -358,11 +363,13 @@ function renderReport() {
     '<div class="sett-h"><span>' + titoloSettimana(st) + '</span><span class="sett-n">' + riassuntoSettimana(st) + '</span></div>' +
     st.giorni.map(r => {
       const dt = dataDaIso(r.giornata);
-      const giorno = GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate();
+      const giorno = GIORNI_BREVI[dt.getDay()] + ' ' + dt.getDate() +
+        (r.festivo ? ' <span class="piccolo" style="color:var(--gold-l)">' + r.festivo + '</span>' : '');
       const cls = ['gg', r.previsti ? '' : 'riposo', r.futura || r.primaAvvio ? 'futura' : '', r.daSistemare ? 'anomalia' : ''].join(' ');
       const apri = r.futura ? '' : ' onclick="apriCorrezione(\'' + r.giornata + '\')"';
       if (!r.previsti && !r.lavorati && !r.ferie && !r.malattia)
-        return '<div class="' + cls + '"' + apri + '><div class="gg-top"><span class="gg-data">' + giorno + '</span><span class="piccolo muted">Riposo</span></div></div>';
+        return '<div class="' + cls + '"' + apri + '><div class="gg-top"><span class="gg-data">' + giorno + '</span><span class="piccolo muted">' +
+          (r.chiusura ? 'Locale chiuso' : 'Riposo') + '</span></div></div>';
       const destra = r.daSistemare ? '<span class="nota-anom">da sistemare</span>'
         : r.inCorso ? '<span class="piccolo muted">in corso</span>'
         : vuotaDiff(r) ? '' : '<span class="gg-diff ' + classeDiff(r) + '">' + fmtDurata(r.differenza, true) + '</span>';
@@ -370,7 +377,7 @@ function renderReport() {
       return '<div class="' + cls + '"' + apri + '>' +
         '<div class="gg-top"><span class="gg-data">' + giorno + '</span>' + destra + '</div>' +
         '<div class="gg-orari">' + orari + '</div>' +
-        '<div class="gg-sotto">Previsto ' + testoFasce(fascePreviste(dipId, r.giornata)) +
+        '<div class="gg-sotto">Previsto ' + testoFasce(fascePreviste(dipId, r.giornata), r.giornata) +
         (r.lavorati || r.previsti ? ' · lavorate ' + fmtDurata(r.lavorati) + ' su ' + fmtDurata(r.previsti) : '') + '</div>' +
         noteHtml(r).map(n => '<div class="gg-sotto">' + n + '</div>').join('') +
         '</div>';
@@ -382,6 +389,8 @@ function renderReport() {
   document.getElementById('rep-note').innerHTML =
     'Ore in h:mm, al minuto, senza arrotondamenti. Differenza = lavorate − previste, giornata per giornata. ' +
     'Le settimane vanno da lunedì a domenica. ' +
+    'I giorni festivi sono segnalati ma restano lavorativi: le maggiorazioni le applica il consulente. ' +
+    (TOLLERANZA_MIN ? 'Differenze entro ' + TOLLERANZA_MIN + ' minuti contano come giornata in pari. ' : '') +
     'Le timbrature fino alle ' + pad(ORA_CAMBIO_GIORNATA) + ':00 contano sulla giornata precedente. ' +
     'La giornata in corso entra nei totali il giorno dopo. Ferie e malattia non generano ore mancanti. ' +
     '<b>*</b> = timbratura dimenticata: vale l\'orario da contratto (correggibile con ✎). ' +
@@ -419,7 +428,7 @@ function apriCorrezione(giornata) {
   }).join('') : '<div class="vuoto">Nessuna timbratura</div>';
 
   const rapide = r.suggerimenti.map(sg => sg.tipo === 'orario-completo'
-    ? '<button class="btn btn-t btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'orario-completo\',\'\')">➕ Ha lavorato l\'orario previsto (' + testoFasce(fascePreviste(dipId, giornata)) + ')</button>' +
+    ? '<button class="btn btn-t btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'orario-completo\',\'\')">➕ Ha lavorato l\'orario previsto (' + testoFasce(fascePreviste(dipId, giornata), giornata) + ')</button>' +
       '<button class="btn btn-o btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'assenza\',\'\')">⛔ Era assente (ore mancanti)</button>'
     : '<button class="btn btn-t btn-blocco" style="margin-top:6px" onclick="correzioneRapida(\'' + dipId + '\',\'' + giornata + '\',\'' + sg.tipo + '\',\'' + sg.ora + '\')">➕ ' + NOMI_TIPO[sg.tipo].slice(3) + ' alle ' + sg.ora + ' (' + sg.motivo + ')</button>'
   ).join('');
@@ -427,7 +436,7 @@ function apriCorrezione(giornata) {
   modale.innerHTML =
     '<div class="modale-bg" onclick="if(event.target===this)chiudiModale()"><div class="modale">' +
     '<div class="card-t">' + DIPENDENTI[dipId].breve + ' — ' + fmtDataLunga(giornata) + '</div>' +
-    '<div class="piccolo muted" style="margin-bottom:10px">Previsto: ' + testoFasce(fascePreviste(dipId, giornata)) + '</div>' +
+    '<div class="piccolo muted" style="margin-bottom:10px">Previsto: ' + testoFasce(fascePreviste(dipId, giornata), giornata) + '</div>' +
     (r.anomalie.length ? '<div style="margin-bottom:10px">' + r.anomalie.map(a => '<div class="nota-anom" style="font-size:0.82rem">⚠️ ' + esc(a) + '</div>').join('') + '</div>' : '') +
     righe +
     (rapide ? '<div class="card-t" style="margin-top:16px;font-size:0.9rem">Correzione rapida</div>' + rapide : '') +
@@ -531,7 +540,7 @@ function righeExport() {
     const dt = dataDaIso(r.giornata);
     return [
       GIORNI_BREVI[dt.getDay()] + ' ' + pad(dt.getDate()) + '/' + mese.slice(5, 7),
-      testoFasce(fascePreviste(dipId, r.giornata)).replace(/–/g, '-'),
+      testoFasce(fascePreviste(dipId, r.giornata), r.giornata).replace(/–/g, '-'),
       testoTurni(r).replace(/–/g, '-').replace('…', '...') || (r.ferie ? 'Ferie' : r.malattia ? 'Malattia' : r.assenza ? 'Assenza' : ''),
       r.previsti ? fmtDurata(r.previsti) : '',
       r.lavorati ? fmtDurata(r.lavorati) : '',
@@ -558,7 +567,8 @@ function esportaPDF() {
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
   pdf.text(d.nome + '  |  ' + d.reparto + '  |  Contratto ' + d.oreSett + ' h/settimana  |  ' + nomeMese(mese), 14, 22);
   pdf.text('Previste ' + fmtDurata(tot.previsti) + '    Lavorate ' + fmtDurata(tot.lavorati) + '    ' + etichettaExtra(dipId) + ' +' + fmtDurata(tot.extra) +
-    '    Mancanti -' + fmtDurata(tot.mancanti) + '    Ferie ' + tot.ferie + ' gg    Malattia ' + tot.malattia + ' gg', 14, 28);
+    '    Mancanti -' + fmtDurata(tot.mancanti) + '    Ferie ' + tot.ferie + ' gg    Malattia ' + tot.malattia + ' gg' +
+    (tot.festivi ? '    Festivi lavorati ' + tot.festivi + ' gg (' + fmtDurata(tot.oreFestivi) + ')' : ''), 14, 28);
   if (tot.anomalie) {
     pdf.setTextColor(200, 40, 40); pdf.setFont('helvetica', 'bold');
     pdf.text(avvisoDaSistemare(tot), 14, 34);
@@ -598,6 +608,7 @@ function esportaExcel() {
     [etichettaExtra(dipId), '', '', '', '', '+' + fmtDurata(tot.extra)],
     ['Ore mancanti', '', '', '', '', '-' + fmtDurata(tot.mancanti)],
     ['Giorni ferie', tot.ferie], ['Giorni malattia', tot.malattia],
+    ['Giorni festivi lavorati', tot.festivi, '', '', fmtDurata(tot.oreFestivi)],
     ['Timbrature dimenticate (orario da contratto)', tot.dimenticate],
     ['* = timbratura dimenticata, applicato orario da contratto'],
   ];

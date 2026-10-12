@@ -29,6 +29,16 @@ const DIPENDENTI = {
   }
 };
 
+// Giorni di chiusura del ristorante: nessuna ora prevista, nessun allarme.
+// Si scrive o un giorno singolo '2026-12-25' oppure un periodo ['2026-08-10', '2026-08-20'].
+const CHIUSURE = [
+  // ['2026-08-10', '2026-08-20'],   // esempio: chiusura estiva
+];
+
+// Tolleranza sulla differenza giornaliera, in minuti: sotto questa soglia la giornata
+// risulta in pari (serve per non vedere -0:02 ogni giorno). 0 = nessuna tolleranza, al minuto esatto.
+const TOLLERANZA_MIN = 0;
+
 const PIN_ADMIN_SHA256 = 'a3513549948fbfecfa1ff0300bf3339f9b1ebff77c9fc831b3c83236a4814d61';
 
 const GIORNI = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
@@ -81,8 +91,42 @@ function tsDaGiornataOra(giornata, hhmm) {
   return d.getTime();
 }
 
+// ══ FESTIVI E CHIUSURE ══
+// Nella ristorazione i festivi si lavorano: non azzerano l'orario previsto, ma vengono
+// segnalati nel report perché di solito il consulente applica la maggiorazione.
+function pasqua(anno) {
+  const a = anno % 19, b = Math.floor(anno / 100), c = anno % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mese = Math.floor((h + l - 7 * m + 114) / 31), giorno = ((h + l - 7 * m + 114) % 31) + 1;
+  return isoLocale(new Date(anno, mese - 1, giorno));
+}
+const FESTIVI_FISSI = ['01-01', '01-06', '04-25', '05-01', '06-02', '06-24', '08-15', '11-01', '12-08', '12-25', '12-26'];
+
+function nomeFestivo(giornata) {
+  const anno = Number(giornata.slice(0, 4));
+  const mg = giornata.slice(5);
+  const nomi = {
+    '01-01': 'Capodanno', '01-06': 'Epifania', '04-25': '25 Aprile', '05-01': '1° Maggio',
+    '06-02': '2 Giugno', '06-24': 'San Giovanni', '08-15': 'Ferragosto', '11-01': 'Ognissanti',
+    '12-08': 'Immacolata', '12-25': 'Natale', '12-26': 'Santo Stefano'
+  };
+  if (FESTIVI_FISSI.includes(mg)) return nomi[mg];
+  const pq = pasqua(anno);
+  if (giornata === pq) return 'Pasqua';
+  if (giornata === aggiungiGiorni(pq, 1)) return 'Pasquetta';
+  return '';
+}
+
+function eChiusura(giornata) {
+  return CHIUSURE.some(c => Array.isArray(c) ? (giornata >= c[0] && giornata <= c[1]) : giornata === c);
+}
+
 // ══ ORARIO CONTRATTUALE ══
 function fascePreviste(dipId, giornata) {
+  if (eChiusura(giornata)) return [];   // locale chiuso: nessun orario previsto
   return DIPENDENTI[dipId].orario[dataDaIso(giornata).getDay()] || [];
 }
 function minutiPrevisti(dipId, giornata) {
@@ -92,7 +136,10 @@ function minutiPrevisti(dipId, giornata) {
     return tot + d;
   }, 0);
 }
-function testoFasce(fasce) { return fasce.length ? fasce.map(f => f[0] + '–' + f[1]).join(' / ') : 'Riposo'; }
+function testoFasce(fasce, giornata) {
+  if (fasce.length) return fasce.map(f => f[0] + '–' + f[1]).join(' / ');
+  return giornata && eChiusura(giornata) ? 'Locale chiuso' : 'Riposo';
+}
 function etichettaExtra(dipId) { return DIPENDENTI[dipId].oreSett >= 40 ? 'Straordinario' : 'Supplementare'; }
 
 // ══ LETTURA DOCUMENTI ══
@@ -143,6 +190,7 @@ function calcolaGiornata(dipId, giornata, timbrature, adessoMs) {
     giornata, previsti, lavorati: 0, differenza: 0, turni: [], anomalie: [], automatiche: [], suggerimenti: [],
     ferie: t.some(x => x.tipo === 'ferie'), malattia: t.some(x => x.tipo === 'malattia'), assenza: t.some(x => x.tipo === 'assenza'),
     inServizio: false, timbrature: t,
+    festivo: nomeFestivo(giornata), chiusura: eChiusura(giornata),
     primaAvvio: !MODALITA_DEMO && !!dip.attivoDal && giornata < dip.attivoDal
   };
   const turno = (da, a, autoDa, autoA) => {
@@ -207,6 +255,7 @@ function calcolaGiornata(dipId, giornata, timbrature, adessoMs) {
   }
   if (r.ferie || r.malattia) r.differenza = r.lavorati;  // assenza giustificata: le ore previste non mancano
   else r.differenza = r.lavorati - previsti;            // 'assenza' = ore mancanti confermate dall'admin
+  if (TOLLERANZA_MIN && Math.abs(r.differenza) <= TOLLERANZA_MIN) r.differenza = 0;
   r.lavorati = Math.round(r.lavorati);
   r.differenza = Math.round(r.differenza);
   return r;
@@ -218,7 +267,8 @@ function calcolaMese(dipId, mese, timbrature, adessoMs) {
   const [y, m] = mese.split('-').map(Number);
   const ultimo = new Date(y, m, 0).getDate();
   const giorni = [];
-  const tot = {previsti: 0, lavorati: 0, extra: 0, mancanti: 0, ferie: 0, malattia: 0, assenze: 0, anomalie: 0, dimenticate: 0};
+  const tot = {previsti: 0, lavorati: 0, extra: 0, mancanti: 0, ferie: 0, malattia: 0, assenze: 0, anomalie: 0, dimenticate: 0,
+    festivi: 0, oreFestivi: 0};
   for (let g = 1; g <= ultimo; g++) {
     const iso = mese + '-' + pad(g);
     const r = calcolaGiornata(dipId, iso, timbrature, adessoMs);
@@ -238,6 +288,7 @@ function calcolaMese(dipId, mese, timbrature, adessoMs) {
     if (r.differenza < 0) tot.mancanti += -r.differenza;
     if (r.assenza) tot.assenze++;
     tot.dimenticate += r.automatiche.length;
+    if (r.festivo && r.lavorati) { tot.festivi++; tot.oreFestivi += r.lavorati; }
   }
   return {giorni, tot};
 }
