@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══ REGISTRO TIMBRATURE ══
+    // Una timbratura si puo' solo AGGIUNGERE. Nessuno puo' cancellarla, e nessuno
+    // puo' cambiarne l'orario o l'intestatario: le correzioni dell'admin sono
+    // annullamenti "soft" che lasciano la riga originale dentro al registro.
+    match /{coll}/{doc} {
+      allow read:   if coll == 'presenze' || coll == 'presenze_prova';
+      allow create: if (coll == 'presenze' || coll == 'presenze_prova') && timbraturaValida();
+      allow update: if (coll == 'presenze' || coll == 'presenze_prova') && soloAnnullamento();
+      allow delete: if false;
+    }
+
+    // ══ TUTTO IL RESTO (app HACCP, celle frigo, temperature, piatti...) resta come prima ══
+    match /{coll}/{doc=**} {
+      allow read, write: if coll != 'presenze' && coll != 'presenze_prova';
+    }
+
+    function timbraturaValida() {
+      let d = request.resource.data;
+      return d.dip in ['alessio', 'stephane', 'adam', 'dalia', 'roberta']
+        && d.tipo in ['entrata', 'uscita', 'ferie', 'malattia']
+        && d.fonte in ['app', 'admin']
+        && d.giornata is string
+        && d.keys().hasOnly(['dip', 'tipo', 'giornata', 'tsClient', 'ts', 'fonte', 'nota', 'inseritaIl']);
+    }
+
+    function soloAnnullamento() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['annullata', 'annullataIl', 'approvata', 'approvataIl']);
+    }
+  }
+}
